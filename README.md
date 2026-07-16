@@ -54,6 +54,41 @@ and [Roadmap](docs/roadmap.md).
 The original detailed project brief is preserved in
 [`startingPrompt.md`](startingPrompt.md).
 
+## Development environment
+
+Development uses a Fedora Toolbx named `canopy-dev` so Qt and compiler packages
+remain isolated from the host workstation. The source tree stays on the host and
+is automatically visible inside Toolbx.
+
+Create and provision the container once:
+
+```bash
+toolbox create --container canopy-dev
+toolbox run --container canopy-dev sudo dnf install \
+    cmake ninja-build gcc-c++ qt6-qtbase-devel qt6-qtdeclarative-devel
+```
+
+Configure and build:
+
+```bash
+toolbox run --container canopy-dev \
+    cmake -S . -B build-toolbox -G Ninja -DCMAKE_BUILD_TYPE=Debug
+toolbox run --container canopy-dev cmake --build build-toolbox
+```
+
+Run from a graphical desktop session:
+
+```bash
+toolbox run --container canopy-dev ./build-toolbox/canopy
+```
+
+Static-check the QML:
+
+```bash
+toolbox run --container canopy-dev \
+    cmake --build build-toolbox --target canopy_qmllint
+```
+
 ## Safety boundary
 
 Canopy is not yet connected to real user data. Later destructive features must
