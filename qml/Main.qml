@@ -43,6 +43,24 @@ ApplicationWindow {
 
             ToolSeparator {}
 
+            ToolButton {
+                text: "←"
+                enabled: tree.canGoBack
+                Accessible.name: "Back"
+                ToolTip.visible: hovered
+                ToolTip.text: "Back (Alt+Left)"
+                onClicked: tree.goBack()
+            }
+
+            ToolButton {
+                text: "↑"
+                enabled: tree.canGoUp
+                Accessible.name: "Parent directory"
+                ToolTip.visible: hovered
+                ToolTip.text: "Parent directory (Alt+Up)"
+                onClicked: tree.goUp()
+            }
+
             Label {
                 Layout.fillWidth: true
                 text: tree.breadcrumb
@@ -91,7 +109,7 @@ ApplicationWindow {
                 Label {
                     id: instruction
                     anchors.centerIn: parent
-                    text: "Scroll to zoom  •  drag open space to pan  •  click growth to inspect"
+                    text: "Scroll to zoom  •  drag open space to pan  •  click to inspect  •  double-click a branch to focus"
                     color: "#aebaaa"
                     font.pixelSize: 12
                 }
@@ -162,6 +180,20 @@ ApplicationWindow {
                     wrapMode: Text.WrapAnywhere
                 }
 
+                Label {
+                    text: "DETAILS"
+                    color: "#71806f"
+                    font.pixelSize: 10
+                    font.bold: true
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    text: tree.selectedDetail
+                    color: "#c5d0c1"
+                    wrapMode: Text.Wrap
+                }
+
                 Item { Layout.fillHeight: true }
 
                 CheckBox {
@@ -179,5 +211,17 @@ ApplicationWindow {
                 }
             }
         }
+    }
+
+    Shortcut {
+        sequence: "Alt+Left"
+        enabled: tree.canGoBack
+        onActivated: tree.goBack()
+    }
+
+    Shortcut {
+        sequence: "Alt+Up"
+        enabled: tree.canGoUp
+        onActivated: tree.goUp()
     }
 }
