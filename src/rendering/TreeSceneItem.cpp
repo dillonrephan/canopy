@@ -127,8 +127,9 @@ void TreeSceneItem::paint(QPainter *painter)
             painter->setFont(labelFont);
             const QString label = entry->name.size() > 24 && !selected && !hovered
                 ? entry->name.left(21) + QStringLiteral("…") : entry->name;
-            painter->drawText(QRectF(position.x() - 82.0, position.y() + radius + 8.0,
-                                     164.0, 34.0),
+            const QRectF labelBounds = layout.labelBounds.translated(
+                position - layout.position);
+            painter->drawText(labelBounds,
                               Qt::AlignHCenter | Qt::AlignTop | Qt::TextWordWrap, label);
         }
         painter->restore();

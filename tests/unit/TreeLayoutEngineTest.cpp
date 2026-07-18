@@ -44,6 +44,7 @@ void TreeLayoutEngineTest::layoutIsDeterministic()
         QCOMPARE(first.at(i).id, second.at(i).id);
         QCOMPARE(first.at(i).parentId, second.at(i).parentId);
         QCOMPARE(first.at(i).position, second.at(i).position);
+        QCOMPARE(first.at(i).labelBounds, second.at(i).labelBounds);
     }
 }
 
@@ -81,10 +82,6 @@ void TreeLayoutEngineTest::wideDirectoryUsesUniquePositions()
 
 void TreeLayoutEngineTest::wideDirectoryReservesLabelSpace()
 {
-    constexpr qreal labelWidth = 164.0;
-    constexpr qreal labelHeight = 34.0;
-    constexpr qreal labelGap = 8.0;
-
     const QVector<FileNode> nodes = FakeTreeData::create();
     const TreeLayoutEngine engine;
     const NodeId downloadsId = 5;
@@ -95,19 +92,16 @@ void TreeLayoutEngineTest::wideDirectoryReservesLabelSpace()
         if (node.parentId != downloadsId)
             continue;
 
-        const QRectF bounds(node.position.x() - labelWidth * 0.5,
-                            node.position.y() + node.radius + labelGap,
-                            labelWidth,
-                            labelHeight);
+        QVERIFY(!node.labelBounds.isEmpty());
         for (const QRectF &existing : labelBounds) {
-            QVERIFY2(!bounds.intersects(existing),
+            QVERIFY2(!node.labelBounds.intersects(existing),
                      qPrintable(QStringLiteral("Overlapping labels at (%1, %2) and (%3, %4)")
-                                    .arg(bounds.x())
-                                    .arg(bounds.y())
+                                    .arg(node.labelBounds.x())
+                                    .arg(node.labelBounds.y())
                                     .arg(existing.x())
                                     .arg(existing.y())));
         }
-        labelBounds.append(bounds);
+        labelBounds.append(node.labelBounds);
     }
 }
 

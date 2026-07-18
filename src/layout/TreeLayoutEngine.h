@@ -3,6 +3,7 @@
 #include "FileNode.h"
 
 #include <QPointF>
+#include <QRectF>
 #include <QVector>
 
 struct LayoutNode {
@@ -11,6 +12,7 @@ struct LayoutNode {
     QPointF position;
     qreal radius = 14.0;
     bool parentContext = false;
+    QRectF labelBounds;
 };
 
 class TreeLayoutEngine
