@@ -13,6 +13,9 @@ struct LayoutNode {
     qreal radius = 14.0;
     bool parentContext = false;
     QRectF labelBounds;
+    QPointF branchStart;
+    QPointF branchControl1;
+    QPointF branchControl2;
 };
 
 class TreeLayoutEngine

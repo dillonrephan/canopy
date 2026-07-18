@@ -6,6 +6,8 @@
 #include <QSet>
 #include <QtTest>
 
+#include <algorithm>
+
 class TreeLayoutEngineTest final : public QObject
 {
     Q_OBJECT
@@ -21,6 +23,7 @@ private slots:
     void lowZoomKeepsFocusAndEmphasizedLabels();
     void closeZoomRevealsOnlyNonOverlappingDescendants();
     void navigationStateTracksSelectionAndHistory();
+    void layoutProvidesConnectedBranchGeometry();
 };
 
 void TreeLayoutEngineTest::fixtureHasStableRelationships()
@@ -52,6 +55,9 @@ void TreeLayoutEngineTest::layoutIsDeterministic()
         QCOMPARE(first.at(i).parentId, second.at(i).parentId);
         QCOMPARE(first.at(i).position, second.at(i).position);
         QCOMPARE(first.at(i).labelBounds, second.at(i).labelBounds);
+        QCOMPARE(first.at(i).branchStart, second.at(i).branchStart);
+        QCOMPARE(first.at(i).branchControl1, second.at(i).branchControl1);
+        QCOMPARE(first.at(i).branchControl2, second.at(i).branchControl2);
     }
 }
 
@@ -209,6 +215,33 @@ void TreeLayoutEngineTest::navigationStateTracksSelectionAndHistory()
     QVERIFY(state.focus(1, false));
     QCOMPARE(state.focusedId(), NodeId(1));
     QCOMPARE(state.selectedId(), NodeId(1));
+}
+
+void TreeLayoutEngineTest::layoutProvidesConnectedBranchGeometry()
+{
+    const QVector<FileNode> nodes = FakeTreeData::create();
+    const TreeLayoutEngine engine;
+    const NodeId homeId = 1;
+    const QVector<LayoutNode> layout = engine.layout(nodes, homeId);
+
+    for (const LayoutNode &node : layout) {
+        QVERIFY2(node.branchStart != node.position,
+                 "Every visible item needs a non-empty growth path");
+        QVERIFY(node.branchControl1 != QPointF());
+        QVERIFY(node.branchControl2 != QPointF());
+
+        if (node.id == homeId) {
+            QCOMPARE(node.branchStart, QPointF(420.0, 650.0));
+            continue;
+        }
+
+        const auto parent = std::ranges::find_if(
+            layout, [&node](const LayoutNode &candidate) {
+                return candidate.id == node.parentId;
+            });
+        QVERIFY(parent != layout.cend());
+        QCOMPARE(node.branchStart, parent->position);
+    }
 }
 
 QTEST_GUILESS_MAIN(TreeLayoutEngineTest)
