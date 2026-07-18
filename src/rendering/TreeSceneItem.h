@@ -1,6 +1,7 @@
 #pragma once
 
 #include "FileNode.h"
+#include "NavigationState.h"
 #include "TreeLayoutEngine.h"
 
 #include <QHash>
@@ -39,7 +40,7 @@ public:
     [[nodiscard]] QString selectedDetail() const;
     [[nodiscard]] QString breadcrumb() const;
     [[nodiscard]] qreal zoom() const noexcept { return m_zoom; }
-    [[nodiscard]] bool canGoBack() const noexcept { return !m_history.isEmpty(); }
+    [[nodiscard]] bool canGoBack() const noexcept { return m_navigation.canGoBack(); }
     [[nodiscard]] bool canGoUp() const;
     [[nodiscard]] bool reducedMotion() const noexcept { return m_reducedMotion; }
     void setReducedMotion(bool reducedMotion);
@@ -79,15 +80,13 @@ private:
     QVector<FileNode> m_nodes;
     QVector<LayoutNode> m_layout;
     TreeLayoutEngine m_layoutEngine;
-    QVector<NodeId> m_history;
+    NavigationState m_navigation {1};
     QHash<NodeId, QPointF> m_previousPositions;
     QVariantAnimation m_focusAnimation;
     QPointF m_pan {120.0, 35.0};
     QPointF m_lastPointer;
     qreal m_zoom = 1.0;
     qreal m_transitionProgress = 1.0;
-    NodeId m_focused = 1;
-    NodeId m_selected = 1;
     NodeId m_hovered = InvalidNodeId;
     bool m_panning = false;
     bool m_reducedMotion = false;

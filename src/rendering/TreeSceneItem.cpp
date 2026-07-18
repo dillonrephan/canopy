@@ -59,7 +59,8 @@ void TreeSceneItem::paint(QPainter *painter)
         layout.labelBounds.translate(position - layout.position);
     }
     const QSet<NodeId> visibleLabels = LabelVisibilityPolicy::visibleLabels(
-        labelLayout, m_focused, m_selected, m_hovered, m_zoom);
+        labelLayout, m_navigation.focusedId(), m_navigation.selectedId(),
+        m_hovered, m_zoom);
 
     for (const LayoutNode &layout : m_layout) {
         const LayoutNode *parent = layoutNode(layout.parentId);
@@ -88,7 +89,7 @@ void TreeSceneItem::paint(QPainter *painter)
         if (!entry)
             continue;
         const QPointF position = drawnPosition(layout);
-        const bool selected = layout.id == m_selected;
+        const bool selected = layout.id == m_navigation.selectedId();
         const bool hovered = layout.id == m_hovered;
         const qreal radius = layout.radius + (hovered ? 3.0 : 0.0);
 
@@ -149,37 +150,37 @@ void TreeSceneItem::paint(QPainter *painter)
 
 QString TreeSceneItem::selectedName() const
 {
-    const FileNode *selected = node(m_selected);
+    const FileNode *selected = node(m_navigation.selectedId());
     return selected ? selected->name : QString();
 }
 
 QString TreeSceneItem::selectedType() const
 {
-    const FileNode *selected = node(m_selected);
+    const FileNode *selected = node(m_navigation.selectedId());
     return selected ? kindName(selected->kind) : QString();
 }
 
 QString TreeSceneItem::selectedPath() const
 {
-    const FileNode *selected = node(m_selected);
+    const FileNode *selected = node(m_navigation.selectedId());
     return selected ? selected->path : QString();
 }
 
 QString TreeSceneItem::selectedDetail() const
 {
-    const FileNode *selected = node(m_selected);
+    const FileNode *selected = node(m_navigation.selectedId());
     return selected ? selected->detail : QString();
 }
 
 QString TreeSceneItem::breadcrumb() const
 {
-    const FileNode *focused = node(m_focused);
+    const FileNode *focused = node(m_navigation.focusedId());
     return focused ? focused->path : QString();
 }
 
 bool TreeSceneItem::canGoUp() const
 {
-    const FileNode *focused = node(m_focused);
+    const FileNode *focused = node(m_navigation.focusedId());
     return focused && focused->parentId != InvalidNodeId;
 }
 
@@ -206,22 +207,22 @@ void TreeSceneItem::resetView()
 
 void TreeSceneItem::goBack()
 {
-    if (m_history.isEmpty())
+    const NodeId target = m_navigation.takeBackTarget();
+    if (target == InvalidNodeId)
         return;
-    const NodeId target = m_history.takeLast();
     focusNode(target, false);
 }
 
 void TreeSceneItem::goUp()
 {
-    const FileNode *focused = node(m_focused);
+    const FileNode *focused = node(m_navigation.focusedId());
     if (focused && focused->parentId != InvalidNodeId)
         focusNode(focused->parentId, true);
 }
 
 void TreeSceneItem::focusSelected()
 {
-    focusNode(m_selected, true);
+    focusNode(m_navigation.selectedId(), true);
 }
 
 void TreeSceneItem::hoverMoveEvent(QHoverEvent *event)
@@ -361,9 +362,8 @@ QColor TreeSceneItem::kindColor(NodeKind kind) const
 
 void TreeSceneItem::selectNode(NodeId id)
 {
-    if (!node(id) || id == m_selected)
+    if (!node(id) || !m_navigation.select(id))
         return;
-    m_selected = id;
     update();
     emit selectionChanged();
 }
@@ -371,18 +371,16 @@ void TreeSceneItem::selectNode(NodeId id)
 void TreeSceneItem::focusNode(NodeId id, bool addToHistory)
 {
     const FileNode *target = node(id);
-    if (!target || !target->isDirectory() || id == m_focused)
+    if (!target || !target->isDirectory()
+        || id == m_navigation.focusedId()) {
         return;
+    }
 
     m_focusAnimation.stop();
     m_previousPositions.clear();
     for (const LayoutNode &layout : m_layout)
         m_previousPositions.insert(layout.id, drawnPosition(layout));
-    if (addToHistory)
-        m_history.append(m_focused);
-
-    m_focused = id;
-    m_selected = id;
+    m_navigation.focus(id, addToHistory);
     relayout();
     resetView();
 
@@ -400,7 +398,7 @@ void TreeSceneItem::focusNode(NodeId id, bool addToHistory)
 
 void TreeSceneItem::relayout()
 {
-    m_layout = m_layoutEngine.layout(m_nodes, m_focused);
+    m_layout = m_layoutEngine.layout(m_nodes, m_navigation.focusedId());
     m_hovered = InvalidNodeId;
     update();
 }
