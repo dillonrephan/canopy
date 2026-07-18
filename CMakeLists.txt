@@ -26,6 +26,8 @@ qt_add_qml_module(canopy
         src/model/FakeTreeData.cpp
         src/model/FakeTreeData.h
         src/model/FileNode.h
+        src/rendering/LabelVisibilityPolicy.cpp
+        src/rendering/LabelVisibilityPolicy.h
         src/rendering/TreeSceneItem.cpp
         src/rendering/TreeSceneItem.h
 )
@@ -48,10 +50,12 @@ if(BUILD_TESTING)
         tests/unit/TreeLayoutEngineTest.cpp
         src/layout/TreeLayoutEngine.cpp
         src/model/FakeTreeData.cpp
+        src/rendering/LabelVisibilityPolicy.cpp
     )
     target_include_directories(canopy_unit_tests PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src/layout
         ${CMAKE_CURRENT_SOURCE_DIR}/src/model
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/rendering
     )
     target_link_libraries(canopy_unit_tests PRIVATE Qt6::Test)
     add_test(NAME canopy_unit_tests COMMAND canopy_unit_tests)

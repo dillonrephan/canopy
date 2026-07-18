@@ -1,4 +1,5 @@
 #include "FakeTreeData.h"
+#include "LabelVisibilityPolicy.h"
 #include "TreeLayoutEngine.h"
 
 #include <QSet>
@@ -15,6 +16,9 @@ private slots:
     void wideDirectoryUsesUniquePositions();
     void wideDirectoryReservesLabelSpace();
     void homeDirectChildrenReserveLabelSpace();
+    void normalZoomPrioritizesHomeLevelLabels();
+    void lowZoomKeepsFocusAndEmphasizedLabels();
+    void closeZoomRevealsOnlyNonOverlappingDescendants();
 };
 
 void TreeLayoutEngineTest::fixtureHasStableRelationships()
@@ -125,6 +129,60 @@ void TreeLayoutEngineTest::homeDirectChildrenReserveLabelSpace()
     }
 
     QCOMPARE(labelBounds.size(), 5);
+}
+
+void TreeLayoutEngineTest::normalZoomPrioritizesHomeLevelLabels()
+{
+    const QVector<FileNode> nodes = FakeTreeData::create();
+    const TreeLayoutEngine engine;
+    const NodeId homeId = 1;
+    const QVector<LayoutNode> layout = engine.layout(nodes, homeId);
+    const QSet<NodeId> visible = LabelVisibilityPolicy::visibleLabels(
+        layout, homeId, homeId, InvalidNodeId, 1.0);
+
+    for (const LayoutNode &node : layout) {
+        const bool homeLevel = node.id == homeId || node.parentId == homeId;
+        QCOMPARE(visible.contains(node.id), homeLevel);
+    }
+}
+
+void TreeLayoutEngineTest::lowZoomKeepsFocusAndEmphasizedLabels()
+{
+    const QVector<FileNode> nodes = FakeTreeData::create();
+    const TreeLayoutEngine engine;
+    const NodeId homeId = 1;
+    const NodeId selectedGrandchildId = 7;
+    const NodeId hoveredGrandchildId = 11;
+    const QVector<LayoutNode> layout = engine.layout(nodes, homeId);
+    const QSet<NodeId> visible = LabelVisibilityPolicy::visibleLabels(
+        layout, homeId, selectedGrandchildId, hoveredGrandchildId, 0.6);
+
+    QCOMPARE(visible, QSet<NodeId>({homeId, selectedGrandchildId, hoveredGrandchildId}));
+}
+
+void TreeLayoutEngineTest::closeZoomRevealsOnlyNonOverlappingDescendants()
+{
+    const QVector<FileNode> nodes = FakeTreeData::create();
+    const TreeLayoutEngine engine;
+    const NodeId homeId = 1;
+    const QVector<LayoutNode> layout = engine.layout(nodes, homeId);
+    const QSet<NodeId> visible = LabelVisibilityPolicy::visibleLabels(
+        layout, homeId, homeId, InvalidNodeId, 1.4);
+    QVector<QRectF> occupiedBounds;
+    qsizetype visibleDescendants = 0;
+
+    for (const LayoutNode &node : layout) {
+        if (!visible.contains(node.id))
+            continue;
+        for (const QRectF &occupied : occupiedBounds)
+            QVERIFY2(!node.labelBounds.intersects(occupied),
+                     "Visible semantic-zoom labels must not overlap");
+        occupiedBounds.append(node.labelBounds);
+        if (node.id != homeId && node.parentId != homeId)
+            ++visibleDescendants;
+    }
+
+    QVERIFY(visibleDescendants > 0);
 }
 
 QTEST_GUILESS_MAIN(TreeLayoutEngineTest)
