@@ -1,5 +1,7 @@
 #include "TreeLayoutEngine.h"
 
+#include "DirectoryPresentationPolicy.h"
+
 #include <QtMath>
 
 namespace {
@@ -102,8 +104,12 @@ QVector<LayoutNode> TreeLayoutEngine::layout(const QVector<FileNode> &nodes,
                                  focusedBranchStart,
                                  radiusFor(*focused, true)));
 
-    const QVector<QPointF> positions = childPositions(focused->children.size());
-    for (qsizetype i = 0; i < focused->children.size(); ++i) {
+    const DirectoryPresentation presentation =
+        DirectoryPresentationPolicy::evaluate(*focused);
+    result.last().hiddenChildCount = presentation.hiddenChildCount;
+    const qsizetype visibleChildCount = presentation.visibleChildCount;
+    const QVector<QPointF> positions = childPositions(visibleChildCount);
+    for (qsizetype i = 0; i < visibleChildCount; ++i) {
         const FileNode *child = findNode(nodes, focused->children.at(i));
         if (!child)
             continue;
@@ -112,8 +118,8 @@ QVector<LayoutNode> TreeLayoutEngine::layout(const QVector<FileNode> &nodes,
                                      radiusFor(*child, false)));
     }
 
-    if (focused->children.size() <= 8) {
-        for (qsizetype childIndex = 0; childIndex < focused->children.size(); ++childIndex) {
+    if (visibleChildCount <= 8) {
+        for (qsizetype childIndex = 0; childIndex < visibleChildCount; ++childIndex) {
             const FileNode *child = findNode(nodes, focused->children.at(childIndex));
             if (!child || !child->isDirectory() || child->children.isEmpty())
                 continue;

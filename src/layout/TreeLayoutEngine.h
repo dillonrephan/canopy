@@ -16,6 +16,7 @@ struct LayoutNode {
     QPointF branchStart;
     QPointF branchControl1;
     QPointF branchControl2;
+    quint64 hiddenChildCount = 0;
 };
 
 class TreeLayoutEngine

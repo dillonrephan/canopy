@@ -27,6 +27,7 @@ private slots:
     void layoutProvidesConnectedBranchGeometry();
     void fixtureTracksDirectoryCountsAndStates();
     void presentationPolicyBoundsExtremeDirectory();
+    void layoutBoundsMaterializedExtremeChildren();
 };
 
 void TreeLayoutEngineTest::fixtureHasStableRelationships()
@@ -61,6 +62,7 @@ void TreeLayoutEngineTest::layoutIsDeterministic()
         QCOMPARE(first.at(i).branchStart, second.at(i).branchStart);
         QCOMPARE(first.at(i).branchControl1, second.at(i).branchControl1);
         QCOMPARE(first.at(i).branchControl2, second.at(i).branchControl2);
+        QCOMPARE(first.at(i).hiddenChildCount, second.at(i).hiddenChildCount);
     }
 }
 
@@ -289,6 +291,43 @@ void TreeLayoutEngineTest::presentationPolicyBoundsExtremeDirectory()
     QCOMPARE(normalPresentation.visibleChildCount, qsizetype(14));
     QCOMPARE(normalPresentation.hiddenChildCount, quint64(0));
     QVERIFY(!normalPresentation.usesContentsFallback);
+}
+
+void TreeLayoutEngineTest::layoutBoundsMaterializedExtremeChildren()
+{
+    QVector<FileNode> nodes;
+    FileNode root {
+        .id = 1,
+        .parentId = InvalidNodeId,
+        .name = QStringLiteral("Extreme"),
+        .path = QStringLiteral("/extreme"),
+        .kind = NodeKind::Directory,
+        .detail = QStringLiteral("Synthetic stress fixture"),
+        .totalChildCount = 1'000'000,
+        .directoryState = DirectoryLoadState::Partial
+    };
+
+    constexpr qsizetype materializedCount = 100;
+    root.children.reserve(materializedCount);
+    nodes.reserve(materializedCount + 1);
+    nodes.append(root);
+    for (qsizetype i = 0; i < materializedCount; ++i) {
+        const NodeId id = static_cast<NodeId>(i + 2);
+        nodes.first().children.append(id);
+        nodes.append({
+            .id = id,
+            .parentId = 1,
+            .name = QStringLiteral("entry-%1").arg(i),
+            .path = QStringLiteral("/extreme/entry-%1").arg(i),
+            .kind = NodeKind::Document
+        });
+    }
+
+    const TreeLayoutEngine engine;
+    const QVector<LayoutNode> layout = engine.layout(nodes, 1);
+
+    QCOMPARE(layout.size(), DirectoryPresentationPolicy::VisualChildLimit + 1);
+    QCOMPARE(layout.first().hiddenChildCount, quint64(999'976));
 }
 
 QTEST_GUILESS_MAIN(TreeLayoutEngineTest)
