@@ -1,5 +1,6 @@
 #include "TreeSceneItem.h"
 
+#include "DirectoryPresentationPolicy.h"
 #include "FakeTreeData.h"
 #include "LabelVisibilityPolicy.h"
 
@@ -186,6 +187,72 @@ QString TreeSceneItem::selectedDetail() const
 {
     const FileNode *selected = node(m_navigation.selectedId());
     return selected ? selected->detail : QString();
+}
+
+bool TreeSceneItem::selectedIsDirectory() const
+{
+    const FileNode *selected = node(m_navigation.selectedId());
+    return selected && selected->isDirectory();
+}
+
+QString TreeSceneItem::selectedDirectoryState() const
+{
+    const FileNode *selected = node(m_navigation.selectedId());
+    if (!selected || !selected->isDirectory())
+        return QString();
+
+    switch (selected->directoryState) {
+    case DirectoryLoadState::Ready: return QStringLiteral("Ready");
+    case DirectoryLoadState::Loading: return QStringLiteral("Still scanning");
+    case DirectoryLoadState::Partial: return QStringLiteral("Partial results");
+    case DirectoryLoadState::Inaccessible: return QStringLiteral("Inaccessible");
+    case DirectoryLoadState::Error: return QStringLiteral("Scan failed");
+    }
+    return QString();
+}
+
+qulonglong TreeSceneItem::selectedTotalChildCount() const
+{
+    const FileNode *selected = node(m_navigation.selectedId());
+    return selected && selected->isDirectory() ? selected->totalChildCount : 0;
+}
+
+qulonglong TreeSceneItem::selectedMaterializedChildCount() const
+{
+    const FileNode *selected = node(m_navigation.selectedId());
+    return selected && selected->isDirectory()
+        ? static_cast<qulonglong>(selected->children.size()) : 0;
+}
+
+bool TreeSceneItem::selectedRequiresContents() const
+{
+    const FileNode *selected = node(m_navigation.selectedId());
+    return selected && DirectoryPresentationPolicy::evaluate(*selected)
+        .usesContentsFallback;
+}
+
+QString TreeSceneItem::selectedDirectoryStatus() const
+{
+    const FileNode *selected = node(m_navigation.selectedId());
+    return selected && selected->isDirectory()
+        ? selected->directoryStatus : QString();
+}
+
+QStringList TreeSceneItem::selectedChildNames() const
+{
+    QStringList names;
+    const FileNode *selected = node(m_navigation.selectedId());
+    if (!selected || !selected->isDirectory())
+        return names;
+
+    const DirectoryPresentation presentation =
+        DirectoryPresentationPolicy::evaluate(*selected);
+    names.reserve(presentation.visibleChildCount);
+    for (qsizetype i = 0; i < presentation.visibleChildCount; ++i) {
+        if (const FileNode *child = node(selected->children.at(i)))
+            names.append(child->name);
+    }
+    return names;
 }
 
 QString TreeSceneItem::breadcrumb() const

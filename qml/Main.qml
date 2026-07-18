@@ -94,6 +94,9 @@ ApplicationWindow {
                 id: tree
                 anchors.fill: parent
                 reducedMotion: reducedMotion.checked
+                onSelectionChanged: {
+                    inspectorTabs.currentIndex = tree.selectedRequiresContents ? 1 : 0
+                }
             }
 
             Rectangle {
@@ -127,7 +130,7 @@ ApplicationWindow {
 
             ColumnLayout {
                 anchors.fill: parent
-                spacing: 16
+                spacing: 12
 
                 Label {
                     text: "INSPECTOR"
@@ -146,55 +149,170 @@ ApplicationWindow {
                     wrapMode: Text.Wrap
                 }
 
-                Rectangle {
+                TabBar {
+                    id: inspectorTabs
                     Layout.fillWidth: true
-                    implicitHeight: 1
-                    color: "#354338"
+                    visible: tree.selectedIsDirectory
+
+                    TabButton {
+                        text: "Details"
+                    }
+
+                    TabButton {
+                        text: "Contents"
+                    }
                 }
 
-                Label {
-                    text: "FORM"
-                    color: "#71806f"
-                    font.pixelSize: 10
-                    font.bold: true
-                }
-
-                Label {
+                StackLayout {
                     Layout.fillWidth: true
-                    text: tree.selectedType
-                    color: "#c5d0c1"
-                    wrapMode: Text.Wrap
-                }
+                    Layout.fillHeight: true
+                    currentIndex: tree.selectedIsDirectory
+                                  ? inspectorTabs.currentIndex : 0
 
-                Label {
-                    text: "PATH"
-                    color: "#71806f"
-                    font.pixelSize: 10
-                    font.bold: true
-                }
+                    Item {
+                        ColumnLayout {
+                            anchors.fill: parent
+                            spacing: 12
 
-                Label {
-                    Layout.fillWidth: true
-                    text: tree.selectedPath
-                    color: "#c5d0c1"
-                    wrapMode: Text.WrapAnywhere
-                }
+                            Rectangle {
+                                Layout.fillWidth: true
+                                implicitHeight: 1
+                                color: "#354338"
+                            }
 
-                Label {
-                    text: "DETAILS"
-                    color: "#71806f"
-                    font.pixelSize: 10
-                    font.bold: true
-                }
+                            Label {
+                                text: "FORM"
+                                color: "#71806f"
+                                font.pixelSize: 10
+                                font.bold: true
+                            }
 
-                Label {
-                    Layout.fillWidth: true
-                    text: tree.selectedDetail
-                    color: "#c5d0c1"
-                    wrapMode: Text.Wrap
-                }
+                            Label {
+                                Layout.fillWidth: true
+                                text: tree.selectedType
+                                color: "#c5d0c1"
+                                wrapMode: Text.Wrap
+                            }
 
-                Item { Layout.fillHeight: true }
+                            Label {
+                                text: "PATH"
+                                color: "#71806f"
+                                font.pixelSize: 10
+                                font.bold: true
+                            }
+
+                            Label {
+                                Layout.fillWidth: true
+                                text: tree.selectedPath
+                                color: "#c5d0c1"
+                                wrapMode: Text.WrapAnywhere
+                            }
+
+                            Label {
+                                text: "DETAILS"
+                                color: "#71806f"
+                                font.pixelSize: 10
+                                font.bold: true
+                            }
+
+                            Label {
+                                Layout.fillWidth: true
+                                text: tree.selectedDetail
+                                color: "#c5d0c1"
+                                wrapMode: Text.Wrap
+                            }
+
+                            Item { Layout.fillHeight: true }
+                        }
+                    }
+
+                    Item {
+                        ColumnLayout {
+                            anchors.fill: parent
+                            spacing: 10
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                visible: tree.selectedRequiresContents
+                                implicitHeight: contentsStatus.implicitHeight + 24
+                                radius: 8
+                                color: "#26352b"
+                                border.color: "#4c624f"
+
+                                ColumnLayout {
+                                    id: contentsStatus
+                                    anchors.fill: parent
+                                    anchors.margins: 12
+                                    spacing: 5
+
+                                    Label {
+                                        Layout.fillWidth: true
+                                        text: tree.selectedDirectoryState
+                                        color: "#f2d58f"
+                                        font.bold: true
+                                    }
+
+                                    Label {
+                                        Layout.fillWidth: true
+                                        text: tree.selectedDirectoryStatus
+                                              || "Tree View is showing a bounded sample."
+                                        color: "#b8c3b3"
+                                        wrapMode: Text.Wrap
+                                    }
+                                }
+                            }
+
+                            Label {
+                                Layout.fillWidth: true
+                                text: Number(tree.selectedMaterializedChildCount).toLocaleString()
+                                      + " of "
+                                      + Number(tree.selectedTotalChildCount).toLocaleString()
+                                      + " entries available"
+                                color: "#c5d0c1"
+                                font.pixelSize: 12
+                                wrapMode: Text.Wrap
+                            }
+
+                            ListView {
+                                id: contentsList
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                clip: true
+                                spacing: 2
+                                model: tree.selectedChildNames
+                                ScrollBar.vertical: ScrollBar {}
+
+                                delegate: Rectangle {
+                                    required property string modelData
+                                    required property int index
+                                    width: ListView.view.width
+                                    height: 34
+                                    radius: 5
+                                    color: index % 2 === 0 ? "#202c24" : "transparent"
+
+                                    Label {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 9
+                                        anchors.rightMargin: 9
+                                        text: parent.modelData
+                                        color: "#d4ddd0"
+                                        verticalAlignment: Text.AlignVCenter
+                                        elide: Text.ElideMiddle
+                                    }
+                                }
+                            }
+
+                            Label {
+                                Layout.fillWidth: true
+                                visible: tree.selectedRequiresContents
+                                text: "The list is a bounded fake sample. Real scanning will load incrementally and remain cancellable."
+                                color: "#71806f"
+                                font.pixelSize: 10
+                                wrapMode: Text.Wrap
+                            }
+                        }
+                    }
+                }
 
                 CheckBox {
                     id: reducedMotion

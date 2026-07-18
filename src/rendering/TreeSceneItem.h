@@ -7,6 +7,7 @@
 #include <QHash>
 #include <QPointF>
 #include <QQuickPaintedItem>
+#include <QStringList>
 #include <QVariantAnimation>
 #include <QVector>
 #include <QtQmlIntegration/qqmlintegration.h>
@@ -24,6 +25,13 @@ class TreeSceneItem : public QQuickPaintedItem
     Q_PROPERTY(QString selectedType READ selectedType NOTIFY selectionChanged)
     Q_PROPERTY(QString selectedPath READ selectedPath NOTIFY selectionChanged)
     Q_PROPERTY(QString selectedDetail READ selectedDetail NOTIFY selectionChanged)
+    Q_PROPERTY(bool selectedIsDirectory READ selectedIsDirectory NOTIFY selectionChanged)
+    Q_PROPERTY(QString selectedDirectoryState READ selectedDirectoryState NOTIFY selectionChanged)
+    Q_PROPERTY(qulonglong selectedTotalChildCount READ selectedTotalChildCount NOTIFY selectionChanged)
+    Q_PROPERTY(qulonglong selectedMaterializedChildCount READ selectedMaterializedChildCount NOTIFY selectionChanged)
+    Q_PROPERTY(bool selectedRequiresContents READ selectedRequiresContents NOTIFY selectionChanged)
+    Q_PROPERTY(QString selectedDirectoryStatus READ selectedDirectoryStatus NOTIFY selectionChanged)
+    Q_PROPERTY(QStringList selectedChildNames READ selectedChildNames NOTIFY selectionChanged)
     Q_PROPERTY(QString breadcrumb READ breadcrumb NOTIFY navigationChanged)
     Q_PROPERTY(qreal zoom READ zoom NOTIFY cameraChanged)
     Q_PROPERTY(bool canGoBack READ canGoBack NOTIFY navigationChanged)
@@ -39,6 +47,13 @@ public:
     [[nodiscard]] QString selectedType() const;
     [[nodiscard]] QString selectedPath() const;
     [[nodiscard]] QString selectedDetail() const;
+    [[nodiscard]] bool selectedIsDirectory() const;
+    [[nodiscard]] QString selectedDirectoryState() const;
+    [[nodiscard]] qulonglong selectedTotalChildCount() const;
+    [[nodiscard]] qulonglong selectedMaterializedChildCount() const;
+    [[nodiscard]] bool selectedRequiresContents() const;
+    [[nodiscard]] QString selectedDirectoryStatus() const;
+    [[nodiscard]] QStringList selectedChildNames() const;
     [[nodiscard]] QString breadcrumb() const;
     [[nodiscard]] qreal zoom() const noexcept { return m_zoom; }
     [[nodiscard]] bool canGoBack() const noexcept { return m_navigation.canGoBack(); }
