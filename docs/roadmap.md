@@ -47,6 +47,7 @@ Exit criteria:
 Goal: make the visual concept robust enough to justify real filesystem work.
 
 - expand fake fixtures to deep, wide, sparse, crowded, and Unicode-heavy cases
+- retain an extreme-count fixture without materializing its full child count
 - refine semantic zoom and aggregation
 - add keyboard navigation and visible focus
 - add navigation history
@@ -62,6 +63,7 @@ Gate: do not proceed until the visual tree is useful rather than merely novel.
 
 - asynchronous home-directory scanning
 - incremental loading and cancellation
+- paged, virtualized Contents fallback for directories beyond the visual budget
 - MIME classification
 - hidden-file toggle
 - directory navigation and default-application opening

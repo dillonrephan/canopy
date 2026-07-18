@@ -34,6 +34,10 @@ Initial node information should include a stable ID, parent ID, display name,
 semantic type, fake path, metadata, child IDs, and expanded/selected state.
 Botanical forms and colors do not belong in this model.
 
+Directory nodes also keep total entry count separate from materialized child
+IDs and report ready, loading, partial, inaccessible, or error state. Extreme
+counts never require an extreme in-memory child vector.
+
 ### Layout engine
 
 A deterministic C++ layout engine converts a focused semantic tree into scene
@@ -50,6 +54,10 @@ geometry. It must:
 
 Layout output is plain scene data. It does not draw and does not access the
 filesystem.
+
+The layout applies a hard visual-child budget before generating geometry. See
+[Bounded Directory Presentation](bounded-directories.md) for the current
+prototype contract and eventual incremental-list requirements.
 
 ### Tree renderer
 
