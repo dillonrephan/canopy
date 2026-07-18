@@ -10,7 +10,7 @@ ApplicationWindow {
     minimumWidth: 900
     minimumHeight: 600
     visible: true
-    title: "Canopy — Phase 1 Prototype"
+    title: "Canopy"
     color: Theme.shellSurface
 
     palette.window: Theme.shellSurface
@@ -44,21 +44,61 @@ ApplicationWindow {
             ToolSeparator {}
 
             ToolButton {
+                id: backButton
                 text: "←"
                 enabled: tree.canGoBack
                 Accessible.name: "Back"
                 ToolTip.visible: hovered
                 ToolTip.text: "Back (Alt+Left)"
                 onClicked: tree.goBack()
+
+                contentItem: Label {
+                    text: backButton.text
+                    color: Theme.textDark
+                    opacity: backButton.enabled ? 1 : 0.36
+                    font.pixelSize: 18
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                background: Rectangle {
+                    implicitWidth: 38
+                    implicitHeight: 38
+                    radius: 12
+                    color: backButton.down ? Theme.selection
+                                           : backButton.hovered ? Theme.raisedSurface
+                                                                : "transparent"
+                    border.color: backButton.hovered ? Theme.border : "transparent"
+                }
             }
 
             ToolButton {
+                id: upButton
                 text: "↑"
                 enabled: tree.canGoUp
                 Accessible.name: "Parent directory"
                 ToolTip.visible: hovered
                 ToolTip.text: "Parent directory (Alt+Up)"
                 onClicked: tree.goUp()
+
+                contentItem: Label {
+                    text: upButton.text
+                    color: Theme.textDark
+                    opacity: upButton.enabled ? 1 : 0.36
+                    font.pixelSize: 18
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                background: Rectangle {
+                    implicitWidth: 38
+                    implicitHeight: 38
+                    radius: 12
+                    color: upButton.down ? Theme.selection
+                                         : upButton.hovered ? Theme.raisedSurface
+                                                            : "transparent"
+                    border.color: upButton.hovered ? Theme.border : "transparent"
+                }
             }
 
             Label {
@@ -78,8 +118,26 @@ ApplicationWindow {
             }
 
             Button {
+                id: resetButton
                 text: "Reset view"
                 onClicked: tree.resetView()
+
+                contentItem: Label {
+                    text: resetButton.text
+                    color: resetButton.down ? Theme.textLight : Theme.textDark
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                background: Rectangle {
+                    implicitWidth: 96
+                    implicitHeight: 36
+                    radius: 12
+                    color: resetButton.down ? Theme.selection
+                                            : resetButton.hovered ? Theme.raisedSurface
+                                                                  : Theme.panelSurface
+                    border.color: Theme.border
+                }
             }
         }
     }
@@ -158,11 +216,49 @@ ApplicationWindow {
                     visible: tree.selectedIsDirectory
 
                     TabButton {
+                        id: detailsTab
                         text: "Details"
+
+                        contentItem: Label {
+                            text: detailsTab.text
+                            color: Theme.textDark
+                            opacity: detailsTab.checked ? 1 : 0.68
+                            font.bold: detailsTab.checked
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        background: Rectangle {
+                            radius: 10
+                            color: detailsTab.checked ? Theme.raisedSurface
+                                                     : detailsTab.hovered ? Theme.shellSurface
+                                                                          : "transparent"
+                            border.color: detailsTab.checked ? Theme.border
+                                                            : "transparent"
+                        }
                     }
 
                     TabButton {
+                        id: contentsTab
                         text: "Contents"
+
+                        contentItem: Label {
+                            text: contentsTab.text
+                            color: Theme.textDark
+                            opacity: contentsTab.checked ? 1 : 0.68
+                            font.bold: contentsTab.checked
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        background: Rectangle {
+                            radius: 10
+                            color: contentsTab.checked ? Theme.raisedSurface
+                                                      : contentsTab.hovered ? Theme.shellSurface
+                                                                            : "transparent"
+                            border.color: contentsTab.checked ? Theme.border
+                                                             : "transparent"
+                        }
                     }
                 }
 
@@ -327,6 +423,35 @@ ApplicationWindow {
                     id: reducedMotion
                     text: "Reduced motion"
                     checked: false
+
+                    indicator: Rectangle {
+                        implicitWidth: 20
+                        implicitHeight: 20
+                        x: reducedMotion.leftPadding
+                        y: (reducedMotion.height - height) / 2
+                        radius: 6
+                        color: reducedMotion.checked ? Theme.selection
+                                                     : Theme.raisedSurface
+                        border.color: reducedMotion.hovered ? Theme.selection
+                                                            : Theme.border
+
+                        Label {
+                            anchors.centerIn: parent
+                            visible: reducedMotion.checked
+                            text: "✓"
+                            color: Theme.textLight
+                            font.bold: true
+                            font.pixelSize: 13
+                        }
+                    }
+
+                    contentItem: Label {
+                        text: reducedMotion.text
+                        color: Theme.textDark
+                        leftPadding: reducedMotion.indicator.width
+                                     + reducedMotion.spacing
+                        verticalAlignment: Text.AlignVCenter
+                    }
                 }
 
                 Label {
