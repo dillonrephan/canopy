@@ -16,6 +16,14 @@ enum class NodeKind {
     Archive
 };
 
+enum class DirectoryLoadState {
+    Ready,
+    Loading,
+    Partial,
+    Inaccessible,
+    Error
+};
+
 struct FileNode {
     NodeId id = InvalidNodeId;
     NodeId parentId = InvalidNodeId;
@@ -24,6 +32,9 @@ struct FileNode {
     NodeKind kind = NodeKind::Directory;
     QString detail;
     QVector<NodeId> children;
+    quint64 totalChildCount = 0;
+    DirectoryLoadState directoryState = DirectoryLoadState::Ready;
+    QString directoryStatus;
 
     [[nodiscard]] bool isDirectory() const noexcept
     {

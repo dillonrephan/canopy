@@ -1,3 +1,4 @@
+#include "DirectoryPresentationPolicy.h"
 #include "FakeTreeData.h"
 #include "LabelVisibilityPolicy.h"
 #include "NavigationState.h"
@@ -24,6 +25,8 @@ private slots:
     void closeZoomRevealsOnlyNonOverlappingDescendants();
     void navigationStateTracksSelectionAndHistory();
     void layoutProvidesConnectedBranchGeometry();
+    void fixtureTracksDirectoryCountsAndStates();
+    void presentationPolicyBoundsExtremeDirectory();
 };
 
 void TreeLayoutEngineTest::fixtureHasStableRelationships()
@@ -242,6 +245,50 @@ void TreeLayoutEngineTest::layoutProvidesConnectedBranchGeometry()
         QVERIFY(parent != layout.cend());
         QCOMPARE(node.branchStart, parent->position);
     }
+}
+
+void TreeLayoutEngineTest::fixtureTracksDirectoryCountsAndStates()
+{
+    const QVector<FileNode> nodes = FakeTreeData::create();
+    QVERIFY(nodes.size() < 100);
+
+    const FileNode &home = nodes.first();
+    QCOMPARE(home.totalChildCount, quint64(home.children.size()));
+    QCOMPARE(home.directoryState, DirectoryLoadState::Ready);
+
+    const auto largeDataset = std::ranges::find_if(nodes, [](const FileNode &node) {
+        return node.name == QStringLiteral("Large Dataset");
+    });
+    QVERIFY(largeDataset != nodes.cend());
+    QVERIFY(largeDataset->isDirectory());
+    QCOMPARE(largeDataset->totalChildCount, quint64(1'000'000));
+    QCOMPARE(largeDataset->children.size(),
+             DirectoryPresentationPolicy::VisualChildLimit);
+    QCOMPARE(largeDataset->directoryState, DirectoryLoadState::Partial);
+    QVERIFY(!largeDataset->directoryStatus.isEmpty());
+}
+
+void TreeLayoutEngineTest::presentationPolicyBoundsExtremeDirectory()
+{
+    const QVector<FileNode> nodes = FakeTreeData::create();
+    const auto largeDataset = std::ranges::find_if(nodes, [](const FileNode &node) {
+        return node.name == QStringLiteral("Large Dataset");
+    });
+    QVERIFY(largeDataset != nodes.cend());
+
+    const DirectoryPresentation largePresentation =
+        DirectoryPresentationPolicy::evaluate(*largeDataset);
+    QCOMPARE(largePresentation.visibleChildCount,
+             DirectoryPresentationPolicy::VisualChildLimit);
+    QCOMPARE(largePresentation.hiddenChildCount, quint64(999'976));
+    QVERIFY(largePresentation.usesContentsFallback);
+
+    const FileNode &downloads = nodes.at(4);
+    const DirectoryPresentation normalPresentation =
+        DirectoryPresentationPolicy::evaluate(downloads);
+    QCOMPARE(normalPresentation.visibleChildCount, qsizetype(14));
+    QCOMPARE(normalPresentation.hiddenChildCount, quint64(0));
+    QVERIFY(!normalPresentation.usesContentsFallback);
 }
 
 QTEST_GUILESS_MAIN(TreeLayoutEngineTest)

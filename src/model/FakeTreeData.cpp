@@ -1,6 +1,10 @@
 #include "FakeTreeData.h"
 
+#include "DirectoryPresentationPolicy.h"
+
 namespace {
+constexpr quint64 kExtremeDirectoryCount = 1'000'000;
+
 NodeId addNode(QVector<FileNode> &nodes,
                NodeId parentId,
                QString name,
@@ -20,12 +24,20 @@ NodeId addNode(QVector<FileNode> &nodes,
                   std::move(detail), {}});
     return id;
 }
+
+void finalizeDirectoryCounts(QVector<FileNode> &nodes)
+{
+    for (FileNode &node : nodes) {
+        if (node.isDirectory() && node.totalChildCount == 0)
+            node.totalChildCount = static_cast<quint64>(node.children.size());
+    }
+}
 }
 
 QVector<FileNode> FakeTreeData::create()
 {
     QVector<FileNode> nodes;
-    nodes.reserve(40);
+    nodes.reserve(72);
 
     const NodeId home = addNode(nodes, InvalidNodeId, QStringLiteral("Home"),
                                 NodeKind::Directory, QStringLiteral("5 main branches"));
@@ -87,5 +99,23 @@ QVector<FileNode> FakeTreeData::create()
     addNode(nodes, source, QStringLiteral("TreeSceneItem.cpp"), NodeKind::Code,
             QStringLiteral("C++ source · 12 KB"));
 
+    const NodeId largeDataset = addNode(
+        nodes, projects, QStringLiteral("Large Dataset"), NodeKind::Directory,
+        QStringLiteral("1,000,000 entries · bounded sample"));
+    for (qsizetype i = 0; i < DirectoryPresentationPolicy::VisualChildLimit; ++i) {
+        addNode(nodes,
+                largeDataset,
+                QStringLiteral("sample-%1.dat").arg(i + 1, 6, 10, QLatin1Char('0')),
+                NodeKind::Document,
+                QStringLiteral("Sample entry · metadata deferred"));
+    }
+
+    FileNode &largeDirectory = nodes[static_cast<qsizetype>(largeDataset - 1)];
+    largeDirectory.totalChildCount = kExtremeDirectoryCount;
+    largeDirectory.directoryState = DirectoryLoadState::Partial;
+    largeDirectory.directoryStatus = QStringLiteral(
+        "Showing a bounded sample while the remaining entries stay unloaded.");
+
+    finalizeDirectoryCounts(nodes);
     return nodes;
 }
