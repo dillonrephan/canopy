@@ -86,7 +86,9 @@ coordinates model, layout, and UI without absorbing their responsibilities.
 
 Phase 1 needs only a versioned set of tokens for palette, geometry, semantic
 forms, typography, and motion timing. The first theme is an illustrated field
-guide: restrained, readable, and botanical without decorative noise.
+guide: restrained, readable, and botanical without decorative noise. C++ scene
+rendering and the QML shell consume the same token source so colors and geometry
+do not drift between layers.
 
 The theme interface must not change navigation semantics or accessibility.
 

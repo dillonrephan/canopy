@@ -78,6 +78,8 @@ Themes may alter palette, branch geometry, botanical forms, motion character,
 background, typography, and decoration. They do not alter shortcuts, navigation,
 file-operation semantics, safety rules, or accessibility guarantees.
 
+The first reference implementation is [Sakura Morning](sakura-morning.md).
+
 ## Prototype evaluation questions
 
 The Phase 1 prototype succeeds only if hands-on use answers yes to most of these:
