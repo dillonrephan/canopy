@@ -1,0 +1,6 @@
+# Fedora packages required to configure, build, lint, and test Canopy.
+cmake
+gcc-c++
+ninja-build
+qt6-qtbase-devel
+qt6-qtdeclarative-devel

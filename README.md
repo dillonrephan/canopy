@@ -60,15 +60,18 @@ Development uses a Fedora Toolbx named `canopy-dev` so Qt and compiler packages
 remain isolated from the host workstation. The source tree stays on the host and
 is automatically visible inside Toolbx.
 
-Create and provision the container once:
+Create or update the container, build the project, and run its tests:
 
 ```bash
-toolbox create --container canopy-dev
-toolbox run --container canopy-dev sudo dnf install \
-    cmake ninja-build gcc-c++ qt6-qtbase-devel qt6-qtdeclarative-devel
+./scripts/bootstrap-test-env.sh
 ```
 
-Configure and build:
+The script is safe to run again. It reads Fedora packages from
+[`requirements-dev.txt`](requirements-dev.txt), reuses the `canopy-dev`
+container when it exists, and keeps build output in `build-toolbox/`. Set
+`CANOPY_TOOLBOX_NAME` or `CANOPY_BUILD_DIR` to override those defaults.
+
+To configure and build manually after provisioning:
 
 ```bash
 toolbox run --container canopy-dev \
