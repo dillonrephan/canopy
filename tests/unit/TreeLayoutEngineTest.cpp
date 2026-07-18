@@ -14,6 +14,7 @@ private slots:
     void focusedDirectoryKeepsParentContext();
     void wideDirectoryUsesUniquePositions();
     void wideDirectoryReservesLabelSpace();
+    void homeDirectChildrenReserveLabelSpace();
 };
 
 void TreeLayoutEngineTest::fixtureHasStableRelationships()
@@ -103,6 +104,27 @@ void TreeLayoutEngineTest::wideDirectoryReservesLabelSpace()
         }
         labelBounds.append(node.labelBounds);
     }
+}
+
+void TreeLayoutEngineTest::homeDirectChildrenReserveLabelSpace()
+{
+    const QVector<FileNode> nodes = FakeTreeData::create();
+    const TreeLayoutEngine engine;
+    const NodeId homeId = 1;
+    const QVector<LayoutNode> layout = engine.layout(nodes, homeId);
+    QVector<QRectF> labelBounds;
+
+    for (const LayoutNode &node : layout) {
+        if (node.parentId != homeId)
+            continue;
+
+        for (const QRectF &existing : labelBounds)
+            QVERIFY2(!node.labelBounds.intersects(existing),
+                     "Home directory labels must not overlap");
+        labelBounds.append(node.labelBounds);
+    }
+
+    QCOMPARE(labelBounds.size(), 5);
 }
 
 QTEST_GUILESS_MAIN(TreeLayoutEngineTest)
