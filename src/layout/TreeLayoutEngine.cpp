@@ -7,6 +7,9 @@ constexpr QPointF kFocusPosition {420.0, 500.0};
 constexpr qreal kLabelWidth = 164.0;
 constexpr qreal kLabelHeight = 34.0;
 constexpr qreal kLabelGap = 8.0;
+constexpr qsizetype kFanChildLimit = 5;
+constexpr qreal kFanHorizontalSpacing = 174.0;
+constexpr qreal kFanMaximumSpan = 700.0;
 constexpr qsizetype kWideColumns = 4;
 constexpr qreal kWideHorizontalSpacing = 185.0;
 constexpr qreal kWideVerticalSpacing = 86.0;
@@ -35,8 +38,9 @@ QVector<QPointF> childPositions(qsizetype count)
     if (count <= 0)
         return positions;
 
-    if (count <= 8) {
-        const qreal span = qMin(660.0, qMax(120.0, (count - 1) * 125.0));
+    if (count <= kFanChildLimit) {
+        const qreal span = qMin(kFanMaximumSpan,
+                                qMax(120.0, (count - 1) * kFanHorizontalSpacing));
         for (qsizetype i = 0; i < count; ++i) {
             const qreal normalized = count == 1 ? 0.0
                 : (static_cast<qreal>(i) / (count - 1)) * 2.0 - 1.0;
