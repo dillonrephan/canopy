@@ -1,6 +1,7 @@
 #include "TreeSceneItem.h"
 
 #include "FakeTreeData.h"
+#include "LabelVisibilityPolicy.h"
 
 #include <QColor>
 #include <QCursor>
@@ -51,6 +52,14 @@ void TreeSceneItem::paint(QPainter *painter)
     painter->save();
     painter->translate(m_pan);
     painter->scale(m_zoom, m_zoom);
+
+    QVector<LayoutNode> labelLayout = m_layout;
+    for (LayoutNode &layout : labelLayout) {
+        const QPointF position = drawnPosition(layout);
+        layout.labelBounds.translate(position - layout.position);
+    }
+    const QSet<NodeId> visibleLabels = LabelVisibilityPolicy::visibleLabels(
+        labelLayout, m_focused, m_selected, m_hovered, m_zoom);
 
     for (const LayoutNode &layout : m_layout) {
         const LayoutNode *parent = layoutNode(layout.parentId);
@@ -119,7 +128,7 @@ void TreeSceneItem::paint(QPainter *painter)
             painter->drawEllipse(position, radius * 0.72, radius);
         }
 
-        if (m_zoom >= 0.72 || selected || hovered) {
+        if (visibleLabels.contains(layout.id)) {
             painter->setPen(QColor("#e6eadf"));
             QFont labelFont = painter->font();
             labelFont.setPixelSize(selected ? 14 : 12);
