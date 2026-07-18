@@ -26,6 +26,18 @@ The initial art direction is an illustrated field guide:
 The first prototype must look intentional, but decoration must not obscure
 names, hit targets, hierarchy, or state.
 
+The botanical grammar is structural:
+
+- the focused directory is the trunk
+- child directories are limbs branching from it
+- nested directories continue as smaller branches
+- files attach to their containing branch as botanical forms on thin stems
+- small junction marks may clarify attachment points, but they do not represent
+  directories themselves
+
+Hover and selection apply to the whole directory limb. Labels remain horizontal
+and precise even when the supporting branch curves.
+
 ## Semantic compression is part of the product
 
 Canopy cannot show every item at every zoom level. Distant views emphasize

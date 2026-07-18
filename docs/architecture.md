@@ -41,6 +41,8 @@ geometry. It must:
 
 - preserve stable positions when state has not changed
 - keep enough parent context for backward navigation
+- represent directories as connected cubic branch paths, not folder-shaped nodes
+- provide thinner attachment paths for files and other non-directory entries
 - constrain branching angles and spacing
 - compress or aggregate wide groups
 - expose bounds for hit testing
@@ -58,10 +60,10 @@ tokens rather than filesystem objects.
 
 The renderer owns:
 
-- visible branch and botanical geometry
+- directory limbs, file attachment stems, and botanical endpoint geometry
 - labels appropriate to the current zoom level
 - viewport culling
-- hover and selection hit testing
+- whole-branch hover and selection hit testing
 - scene-to-view coordinate conversion
 
 QML overlays remain appropriate for conventional controls and the inspector.
