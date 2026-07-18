@@ -71,6 +71,13 @@ The script is safe to run again. It reads Fedora packages from
 container when it exists, and keeps build output in `build-toolbox/`. Set
 `CANOPY_TOOLBOX_NAME` or `CANOPY_BUILD_DIR` to override those defaults.
 
+After the environment is provisioned, run the complete configure, build, QML
+lint, and unit-test loop without reinstalling packages:
+
+```bash
+./scripts/check.sh
+```
+
 To configure and build manually after provisioning:
 
 ```bash

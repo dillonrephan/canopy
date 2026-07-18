@@ -43,21 +43,8 @@ printf 'Installing development requirements from %s\n' "${REQUIREMENTS_FILE}"
 toolbox run --container "${TOOLBOX_NAME}" \
     sudo dnf install --assumeyes "${packages[@]}"
 
-printf 'Configuring Canopy in %s\n' "${BUILD_DIR}"
-toolbox run --container "${TOOLBOX_NAME}" \
-    cmake \
-        -S "${PROJECT_DIR}" \
-        -B "${BUILD_DIR}" \
-        -G Ninja \
-        -DCMAKE_BUILD_TYPE=Debug \
-        -DBUILD_TESTING=ON
-
-printf 'Building Canopy\n'
-toolbox run --container "${TOOLBOX_NAME}" \
-    cmake --build "${BUILD_DIR}"
-
-printf 'Running Canopy tests\n'
-toolbox run --container "${TOOLBOX_NAME}" \
-    ctest --test-dir "${BUILD_DIR}" --output-on-failure
+CANOPY_TOOLBOX_NAME="${TOOLBOX_NAME}" \
+CANOPY_BUILD_DIR="${BUILD_DIR}" \
+    "${SCRIPT_DIR}/check.sh"
 
 printf '\nCanopy test environment is ready in Toolbx %s.\n' "${TOOLBOX_NAME}"
