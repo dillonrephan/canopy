@@ -15,9 +15,25 @@ constexpr qreal kWideHorizontalSpacing = 185.0;
 constexpr qreal kWideVerticalSpacing = 86.0;
 constexpr qreal kWideFirstRowY = 340.0;
 
+void setBranchGeometry(LayoutNode &node)
+{
+    const QPointF delta = node.position - node.branchStart;
+    const qreal length = qSqrt(delta.x() * delta.x() + delta.y() * delta.y());
+    const qreal direction = node.id % 2 == 0 ? -1.0 : 1.0;
+    const qreal bend = direction * qMin(18.0, 6.0 + qAbs(delta.x()) * 0.05);
+    const QPointF normal = length > 0.0
+        ? QPointF(-delta.y() / length, delta.x() / length)
+        : QPointF();
+    const QPointF offset = normal * bend;
+
+    node.branchControl1 = node.branchStart + delta * 0.32 + offset;
+    node.branchControl2 = node.branchStart + delta * 0.72 - offset * 0.35;
+}
+
 LayoutNode makeLayoutNode(NodeId id,
                           NodeId parentId,
                           QPointF position,
+                          QPointF branchStart,
                           qreal radius,
                           bool parentContext = false)
 {
@@ -28,6 +44,8 @@ LayoutNode makeLayoutNode(NodeId id,
         kLabelWidth,
         kLabelHeight
     };
+    result.branchStart = branchStart;
+    setBranchGeometry(result);
     return result;
 }
 
@@ -72,12 +90,16 @@ QVector<LayoutNode> TreeLayoutEngine::layout(const QVector<FileNode> &nodes,
     if (!focused)
         return result;
 
+    QPointF focusedBranchStart {420.0, 650.0};
     if (const FileNode *parent = findNode(nodes, focused->parentId)) {
         result.append(makeLayoutNode(parent->id, InvalidNodeId,
-                                     {420.0, 635.0}, 17.0, true));
+                                     {420.0, 635.0}, {420.0, 710.0},
+                                     17.0, true));
+        focusedBranchStart = {420.0, 635.0};
     }
 
     result.append(makeLayoutNode(focused->id, focused->parentId, kFocusPosition,
+                                 focusedBranchStart,
                                  radiusFor(*focused, true)));
 
     const QVector<QPointF> positions = childPositions(focused->children.size());
@@ -86,6 +108,7 @@ QVector<LayoutNode> TreeLayoutEngine::layout(const QVector<FileNode> &nodes,
         if (!child)
             continue;
         result.append(makeLayoutNode(child->id, focused->id, positions.at(i),
+                                     kFocusPosition,
                                      radiusFor(*child, false)));
     }
 
@@ -106,6 +129,7 @@ QVector<LayoutNode> TreeLayoutEngine::layout(const QVector<FileNode> &nodes,
                     grandchild->id,
                     child->id,
                     {anchor.x() + offset, anchor.y() - 120.0 - qAbs(offset) * 0.08},
+                    anchor,
                     radiusFor(*grandchild, false) * 0.88));
             }
         }
