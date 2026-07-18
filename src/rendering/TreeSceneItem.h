@@ -13,6 +13,7 @@
 
 class QMouseEvent;
 class QPainter;
+class QPainterPath;
 class QWheelEvent;
 
 class TreeSceneItem : public QQuickPaintedItem
@@ -71,6 +72,7 @@ private:
     [[nodiscard]] const FileNode *node(NodeId id) const;
     [[nodiscard]] const LayoutNode *layoutNode(NodeId id) const;
     [[nodiscard]] QPointF drawnPosition(const LayoutNode &node) const;
+    [[nodiscard]] QPainterPath drawnBranchPath(const LayoutNode &node) const;
     [[nodiscard]] QString kindName(NodeKind kind) const;
     [[nodiscard]] QColor kindColor(NodeKind kind) const;
     void selectNode(NodeId id);

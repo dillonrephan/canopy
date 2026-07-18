@@ -11,6 +11,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPainterPathStroker>
 #include <QWheelEvent>
 #include <QtMath>
 
@@ -63,23 +64,32 @@ void TreeSceneItem::paint(QPainter *painter)
         m_hovered, m_zoom);
 
     for (const LayoutNode &layout : m_layout) {
-        const LayoutNode *parent = layoutNode(layout.parentId);
-        if (!parent)
-            continue;
         const FileNode *entry = node(layout.id);
         if (!entry)
             continue;
 
-        const QPointF position = drawnPosition(layout);
-        const QPointF parentPosition = drawnPosition(*parent);
-        const QPointF delta = position - parentPosition;
-        QPainterPath branch(parentPosition);
-        branch.cubicTo(parentPosition + QPointF(delta.x() * 0.35, -18.0),
-                       position - QPointF(delta.x() * 0.24, 28.0), position);
+        const bool directory = entry->isDirectory();
+        const bool selected = layout.id == m_navigation.selectedId();
+        const bool hovered = layout.id == m_hovered;
+        const bool focused = layout.id == m_navigation.focusedId();
+        const QPainterPath branch = drawnBranchPath(layout);
         QColor branchColor("#765a3d");
-        if (layout.parentContext || parent->parentContext)
+        if (hovered)
+            branchColor = QColor("#9b7a50");
+        if (layout.parentContext)
             branchColor.setAlphaF(0.48);
-        painter->setPen(QPen(branchColor, entry->isDirectory() ? 8.0 : 3.5,
+
+        const qreal branchWidth = directory ? (focused ? 13.0 : 9.0) : 3.0;
+        if (directory && (selected || hovered)) {
+            QColor emphasis = selected ? QColor("#f2d58f") : QColor("#9fbd8f");
+            if (layout.parentContext)
+                emphasis.setAlphaF(0.55);
+            painter->setPen(QPen(emphasis, branchWidth + 6.0,
+                                 Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            painter->drawPath(branch);
+        }
+
+        painter->setPen(QPen(branchColor, branchWidth,
                              Qt::SolidLine, Qt::RoundCap));
         painter->drawPath(branch);
     }
@@ -96,17 +106,16 @@ void TreeSceneItem::paint(QPainter *painter)
         painter->save();
         if (layout.parentContext)
             painter->setOpacity(0.48);
-        painter->setPen(QPen(selected ? QColor("#f2d58f") : QColor("#1f2b23"),
-                             selected ? 4.0 : 2.0));
-        painter->setBrush(kindColor(entry->kind));
-
         if (entry->kind == NodeKind::Directory) {
-            painter->drawEllipse(position, radius * 1.25, radius);
-            painter->drawEllipse(position + QPointF(-radius * 0.65, 3.0),
-                                 radius * 0.72, radius * 0.58);
-            painter->drawEllipse(position + QPointF(radius * 0.68, 2.0),
-                                 radius * 0.72, radius * 0.58);
+            painter->setPen(QPen(selected ? QColor("#f2d58f") : QColor("#2c2118"),
+                                 selected ? 2.5 : 1.5));
+            painter->setBrush(hovered ? QColor("#9b7a50") : QColor("#765a3d"));
+            const qreal junctionRadius = hovered ? 6.5 : 4.5;
+            painter->drawEllipse(position, junctionRadius, junctionRadius);
         } else if (entry->kind == NodeKind::Image) {
+            painter->setPen(QPen(selected ? QColor("#f2d58f") : QColor("#1f2b23"),
+                                 selected ? 4.0 : 2.0));
+            painter->setBrush(kindColor(entry->kind));
             for (int petal = 0; petal < 5; ++petal) {
                 const qreal angle = qDegreesToRadians(petal * 72.0 - 90.0);
                 const QPointF center = position
@@ -116,6 +125,9 @@ void TreeSceneItem::paint(QPainter *painter)
             painter->setBrush(QColor("#f2d58f"));
             painter->drawEllipse(position, radius * 0.38, radius * 0.38);
         } else if (entry->kind == NodeKind::Archive) {
+            painter->setPen(QPen(selected ? QColor("#f2d58f") : QColor("#1f2b23"),
+                                 selected ? 4.0 : 2.0));
+            painter->setBrush(kindColor(entry->kind));
             QPainterPath pod;
             pod.moveTo(position + QPointF(0.0, -radius));
             pod.cubicTo(position + QPointF(radius, -radius * 0.4),
@@ -126,14 +138,18 @@ void TreeSceneItem::paint(QPainter *painter)
                         position + QPointF(0.0, -radius));
             painter->drawPath(pod);
         } else {
+            painter->setPen(QPen(selected ? QColor("#f2d58f") : QColor("#1f2b23"),
+                                 selected ? 4.0 : 2.0));
+            painter->setBrush(kindColor(entry->kind));
             painter->drawEllipse(position, radius * 0.72, radius);
         }
 
         if (visibleLabels.contains(layout.id)) {
             painter->setPen(QColor("#e6eadf"));
             QFont labelFont = painter->font();
-            labelFont.setPixelSize(selected ? 14 : 12);
-            labelFont.setWeight(selected ? QFont::DemiBold : QFont::Normal);
+            labelFont.setPixelSize(selected ? 14 : entry->isDirectory() ? 13 : 12);
+            labelFont.setWeight(selected || entry->isDirectory()
+                                    ? QFont::DemiBold : QFont::Normal);
             painter->setFont(labelFont);
             const QString label = entry->name.size() > 24 && !selected && !hovered
                 ? entry->name.left(21) + QStringLiteral("…") : entry->name;
@@ -302,8 +318,25 @@ NodeId TreeSceneItem::nodeAt(const QPointF &viewPosition) const
 {
     const QPointF scenePosition = toScene(viewPosition);
     for (auto it = m_layout.crbegin(); it != m_layout.crend(); ++it) {
-        if (QLineF(scenePosition, drawnPosition(*it)).length() <= it->radius + 9.0)
+        const FileNode *entry = node(it->id);
+        if (!entry)
+            continue;
+
+        if (entry->isDirectory()) {
+            QPainterPathStroker hitStroker;
+            hitStroker.setWidth(28.0);
+            hitStroker.setCapStyle(Qt::RoundCap);
+            hitStroker.setJoinStyle(Qt::RoundJoin);
+            const QRectF labelBounds = it->labelBounds.translated(
+                drawnPosition(*it) - it->position);
+            if (hitStroker.createStroke(drawnBranchPath(*it)).contains(scenePosition)
+                || labelBounds.contains(scenePosition)) {
+                return it->id;
+            }
+        } else if (QLineF(scenePosition, drawnPosition(*it)).length()
+                   <= it->radius + 9.0) {
             return it->id;
+        }
     }
     return InvalidNodeId;
 }
@@ -332,6 +365,22 @@ QPointF TreeSceneItem::drawnPosition(const LayoutNode &layout) const
     if (previous == m_previousPositions.cend() || m_transitionProgress >= 1.0)
         return layout.position;
     return *previous + (layout.position - *previous) * m_transitionProgress;
+}
+
+QPainterPath TreeSceneItem::drawnBranchPath(const LayoutNode &layout) const
+{
+    const QPointF end = drawnPosition(layout);
+    QPointF start = layout.branchStart;
+    if (const LayoutNode *parent = layoutNode(layout.parentId))
+        start = drawnPosition(*parent);
+
+    const QPointF control1 = start
+        + (layout.branchControl1 - layout.branchStart);
+    const QPointF control2 = end
+        + (layout.branchControl2 - layout.position);
+    QPainterPath result(start);
+    result.cubicTo(control1, control2, end);
+    return result;
 }
 
 QString TreeSceneItem::kindName(NodeKind kind) const
