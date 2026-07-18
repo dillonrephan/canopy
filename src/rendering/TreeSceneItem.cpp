@@ -3,6 +3,7 @@
 #include "DirectoryPresentationPolicy.h"
 #include "FakeTreeData.h"
 #include "LabelVisibilityPolicy.h"
+#include "ThemeTokens.h"
 
 #include <QColor>
 #include <QCursor>
@@ -29,7 +30,7 @@ TreeSceneItem::TreeSceneItem(QQuickItem *parent)
     setAcceptHoverEvents(true);
     setAntialiasing(true);
 
-    m_focusAnimation.setDuration(190);
+    m_focusAnimation.setDuration(ThemeTokens::active().focusAnimationDuration);
     m_focusAnimation.setStartValue(0.0);
     m_focusAnimation.setEndValue(1.0);
     m_focusAnimation.setEasingCurve(QEasingCurve::OutCubic);
@@ -49,8 +50,9 @@ TreeSceneItem::TreeSceneItem(QQuickItem *parent)
 
 void TreeSceneItem::paint(QPainter *painter)
 {
+    const ThemeValues &theme = ThemeTokens::active();
     painter->setRenderHint(QPainter::Antialiasing, true);
-    painter->fillRect(boundingRect(), QColor("#101713"));
+    painter->fillRect(boundingRect(), theme.sceneCanvas);
     painter->save();
     painter->translate(m_pan);
     painter->scale(m_zoom, m_zoom);
@@ -74,18 +76,21 @@ void TreeSceneItem::paint(QPainter *painter)
         const bool hovered = layout.id == m_hovered;
         const bool focused = layout.id == m_navigation.focusedId();
         const QPainterPath branch = drawnBranchPath(layout);
-        QColor branchColor("#765a3d");
+        QColor branchColor = theme.wood;
         if (hovered)
-            branchColor = QColor("#9b7a50");
+            branchColor = theme.woodHover;
         if (layout.parentContext)
             branchColor.setAlphaF(0.48);
 
-        const qreal branchWidth = directory ? (focused ? 13.0 : 9.0) : 3.0;
+        const qreal branchWidth = directory
+            ? (focused ? theme.focusedBranchWidth : theme.directoryBranchWidth)
+            : theme.fileStemWidth;
         if (directory && (selected || hovered)) {
-            QColor emphasis = selected ? QColor("#f2d58f") : QColor("#9fbd8f");
+            QColor emphasis = selected ? theme.selection : theme.hover;
             if (layout.parentContext)
                 emphasis.setAlphaF(0.55);
-            painter->setPen(QPen(emphasis, branchWidth + 6.0,
+            painter->setPen(QPen(emphasis,
+                                 branchWidth + theme.selectionHaloWidth,
                                  Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
             painter->drawPath(branch);
         }
@@ -108,13 +113,14 @@ void TreeSceneItem::paint(QPainter *painter)
         if (layout.parentContext)
             painter->setOpacity(0.48);
         if (entry->kind == NodeKind::Directory) {
-            painter->setPen(QPen(selected ? QColor("#f2d58f") : QColor("#2c2118"),
+            painter->setPen(QPen(selected ? theme.selection : theme.woodShadow,
                                  selected ? 2.5 : 1.5));
-            painter->setBrush(hovered ? QColor("#9b7a50") : QColor("#765a3d"));
-            const qreal junctionRadius = hovered ? 6.5 : 4.5;
+            painter->setBrush(hovered ? theme.woodHover : theme.wood);
+            const qreal junctionRadius = hovered
+                ? theme.hoveredJunctionRadius : theme.junctionRadius;
             painter->drawEllipse(position, junctionRadius, junctionRadius);
         } else if (entry->kind == NodeKind::Image) {
-            painter->setPen(QPen(selected ? QColor("#f2d58f") : QColor("#1f2b23"),
+            painter->setPen(QPen(selected ? theme.selection : theme.woodShadow,
                                  selected ? 4.0 : 2.0));
             painter->setBrush(kindColor(entry->kind));
             for (int petal = 0; petal < 5; ++petal) {
@@ -123,10 +129,10 @@ void TreeSceneItem::paint(QPainter *painter)
                     + QPointF(qCos(angle) * radius * 0.7, qSin(angle) * radius * 0.7);
                 painter->drawEllipse(center, radius * 0.55, radius * 0.38);
             }
-            painter->setBrush(QColor("#f2d58f"));
+            painter->setBrush(theme.flowerCenter);
             painter->drawEllipse(position, radius * 0.38, radius * 0.38);
         } else if (entry->kind == NodeKind::Archive) {
-            painter->setPen(QPen(selected ? QColor("#f2d58f") : QColor("#1f2b23"),
+            painter->setPen(QPen(selected ? theme.selection : theme.woodShadow,
                                  selected ? 4.0 : 2.0));
             painter->setBrush(kindColor(entry->kind));
             QPainterPath pod;
@@ -139,14 +145,14 @@ void TreeSceneItem::paint(QPainter *painter)
                         position + QPointF(0.0, -radius));
             painter->drawPath(pod);
         } else {
-            painter->setPen(QPen(selected ? QColor("#f2d58f") : QColor("#1f2b23"),
+            painter->setPen(QPen(selected ? theme.selection : theme.woodShadow,
                                  selected ? 4.0 : 2.0));
             painter->setBrush(kindColor(entry->kind));
             painter->drawEllipse(position, radius * 0.72, radius);
         }
 
         if (visibleLabels.contains(layout.id)) {
-            painter->setPen(QColor("#e6eadf"));
+            painter->setPen(theme.textDark);
             QFont labelFont = painter->font();
             labelFont.setPixelSize(selected ? 14 : entry->isDirectory() ? 13 : 12);
             labelFont.setWeight(selected || entry->isDirectory()
@@ -465,15 +471,16 @@ QString TreeSceneItem::kindName(NodeKind kind) const
 
 QColor TreeSceneItem::kindColor(NodeKind kind) const
 {
+    const ThemeValues &theme = ThemeTokens::active();
     switch (kind) {
-    case NodeKind::Directory: return QColor("#477a55");
-    case NodeKind::Document: return QColor("#8aaa72");
-    case NodeKind::Image: return QColor("#d88e9b");
-    case NodeKind::Audio: return QColor("#9272aa");
-    case NodeKind::Code: return QColor("#5e9c75");
-    case NodeKind::Archive: return QColor("#b88955");
+    case NodeKind::Directory: return theme.wood;
+    case NodeKind::Document: return theme.document;
+    case NodeKind::Image: return theme.image;
+    case NodeKind::Audio: return theme.audio;
+    case NodeKind::Code: return theme.code;
+    case NodeKind::Archive: return theme.archive;
     }
-    return QColor("#879083");
+    return theme.document;
 }
 
 void TreeSceneItem::selectNode(NodeId id)

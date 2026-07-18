@@ -34,6 +34,8 @@ qt_add_qml_module(canopy
         src/rendering/LabelVisibilityPolicy.h
         src/rendering/TreeSceneItem.cpp
         src/rendering/TreeSceneItem.h
+        src/theme/ThemeTokens.cpp
+        src/theme/ThemeTokens.h
 )
 
 target_link_libraries(canopy PRIVATE
@@ -46,6 +48,7 @@ target_include_directories(canopy PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/model
     ${CMAKE_CURRENT_SOURCE_DIR}/src/navigation
     ${CMAKE_CURRENT_SOURCE_DIR}/src/rendering
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/theme
 )
 
 include(CTest)
