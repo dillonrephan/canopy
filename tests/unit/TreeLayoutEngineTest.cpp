@@ -1,5 +1,6 @@
 #include "FakeTreeData.h"
 #include "LabelVisibilityPolicy.h"
+#include "NavigationState.h"
 #include "TreeLayoutEngine.h"
 
 #include <QSet>
@@ -19,6 +20,7 @@ private slots:
     void normalZoomPrioritizesHomeLevelLabels();
     void lowZoomKeepsFocusAndEmphasizedLabels();
     void closeZoomRevealsOnlyNonOverlappingDescendants();
+    void navigationStateTracksSelectionAndHistory();
 };
 
 void TreeLayoutEngineTest::fixtureHasStableRelationships()
@@ -183,6 +185,30 @@ void TreeLayoutEngineTest::closeZoomRevealsOnlyNonOverlappingDescendants()
     }
 
     QVERIFY(visibleDescendants > 0);
+}
+
+void TreeLayoutEngineTest::navigationStateTracksSelectionAndHistory()
+{
+    NavigationState state(1);
+
+    QCOMPARE(state.focusedId(), NodeId(1));
+    QCOMPARE(state.selectedId(), NodeId(1));
+    QVERIFY(!state.canGoBack());
+
+    QVERIFY(state.select(6));
+    QCOMPARE(state.focusedId(), NodeId(1));
+    QCOMPARE(state.selectedId(), NodeId(6));
+
+    QVERIFY(state.focus(6, true));
+    QCOMPARE(state.focusedId(), NodeId(6));
+    QCOMPARE(state.selectedId(), NodeId(6));
+    QVERIFY(state.canGoBack());
+    QCOMPARE(state.takeBackTarget(), NodeId(1));
+    QVERIFY(!state.canGoBack());
+
+    QVERIFY(state.focus(1, false));
+    QCOMPARE(state.focusedId(), NodeId(1));
+    QCOMPARE(state.selectedId(), NodeId(1));
 }
 
 QTEST_GUILESS_MAIN(TreeLayoutEngineTest)
