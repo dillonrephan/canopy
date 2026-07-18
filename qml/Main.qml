@@ -11,20 +11,21 @@ ApplicationWindow {
     minimumHeight: 600
     visible: true
     title: "Canopy — Phase 1 Prototype"
-    color: "#101713"
+    color: Theme.shellSurface
 
-    palette.window: "#101713"
-    palette.windowText: "#e6eadf"
-    palette.text: "#e6eadf"
-    palette.button: "#26352b"
-    palette.buttonText: "#e6eadf"
-    palette.highlight: "#477a55"
+    palette.window: Theme.shellSurface
+    palette.windowText: Theme.textDark
+    palette.text: Theme.textDark
+    palette.button: Theme.raisedSurface
+    palette.buttonText: Theme.textDark
+    palette.highlight: Theme.selection
+    palette.highlightedText: Theme.textLight
 
     header: ToolBar {
-        implicitHeight: 58
+        implicitHeight: 62
         background: Rectangle {
-            color: "#172019"
-            border.color: "#2d3b30"
+            color: Theme.shellSurface
+            border.color: Theme.border
         }
 
         RowLayout {
@@ -34,11 +35,10 @@ ApplicationWindow {
             spacing: 12
 
             Label {
-                text: "CANOPY"
-                font.pixelSize: 17
+                text: "Canopy"
+                font.pixelSize: 22
                 font.bold: true
-                font.letterSpacing: 2.5
-                color: "#c9d8bd"
+                color: Theme.textDark
             }
 
             ToolSeparator {}
@@ -64,14 +64,16 @@ ApplicationWindow {
             Label {
                 Layout.fillWidth: true
                 text: tree.breadcrumb
-                color: "#b8c3b3"
+                color: Theme.textDark
+                opacity: 0.76
                 elide: Text.ElideMiddle
                 font.pixelSize: 14
             }
 
             Label {
                 text: Math.round(tree.zoom * 100) + "%"
-                color: "#8fa08d"
+                color: Theme.textDark
+                opacity: 0.62
                 font.pixelSize: 12
             }
 
@@ -106,14 +108,15 @@ ApplicationWindow {
                 width: instruction.implicitWidth + 24
                 height: instruction.implicitHeight + 16
                 radius: 10
-                color: "#c8172019"
-                border.color: "#38483b"
+                color: Theme.raisedSurface
+                border.color: Theme.border
 
                 Label {
                     id: instruction
                     anchors.centerIn: parent
                     text: "Scroll to zoom  •  drag open space to pan  •  click to inspect  •  double-click a branch to focus"
-                    color: "#aebaaa"
+                    color: Theme.textDark
+                    opacity: 0.78
                     font.pixelSize: 12
                 }
             }
@@ -124,8 +127,8 @@ ApplicationWindow {
             SplitView.minimumWidth: 260
             padding: 24
             background: Rectangle {
-                color: "#19231c"
-                border.color: "#314035"
+                color: Theme.panelSurface
+                border.color: Theme.border
             }
 
             ColumnLayout {
@@ -133,17 +136,17 @@ ApplicationWindow {
                 spacing: 12
 
                 Label {
-                    text: "INSPECTOR"
-                    color: "#839480"
-                    font.pixelSize: 12
+                    text: "Inspector"
+                    color: Theme.textDark
+                    opacity: 0.68
+                    font.pixelSize: 13
                     font.bold: true
-                    font.letterSpacing: 1.8
                 }
 
                 Label {
                     Layout.fillWidth: true
                     text: tree.selectedName
-                    color: "#edf0e8"
+                    color: Theme.textDark
                     font.pixelSize: 24
                     font.bold: true
                     wrapMode: Text.Wrap
@@ -177,12 +180,13 @@ ApplicationWindow {
                             Rectangle {
                                 Layout.fillWidth: true
                                 implicitHeight: 1
-                                color: "#354338"
+                                color: Theme.border
                             }
 
                             Label {
-                                text: "FORM"
-                                color: "#71806f"
+                                text: "Form"
+                                color: Theme.textDark
+                                opacity: 0.62
                                 font.pixelSize: 10
                                 font.bold: true
                             }
@@ -190,13 +194,14 @@ ApplicationWindow {
                             Label {
                                 Layout.fillWidth: true
                                 text: tree.selectedType
-                                color: "#c5d0c1"
+                                color: Theme.textDark
                                 wrapMode: Text.Wrap
                             }
 
                             Label {
-                                text: "PATH"
-                                color: "#71806f"
+                                text: "Path"
+                                color: Theme.textDark
+                                opacity: 0.62
                                 font.pixelSize: 10
                                 font.bold: true
                             }
@@ -204,13 +209,14 @@ ApplicationWindow {
                             Label {
                                 Layout.fillWidth: true
                                 text: tree.selectedPath
-                                color: "#c5d0c1"
+                                color: Theme.textDark
                                 wrapMode: Text.WrapAnywhere
                             }
 
                             Label {
-                                text: "DETAILS"
-                                color: "#71806f"
+                                text: "Details"
+                                color: Theme.textDark
+                                opacity: 0.62
                                 font.pixelSize: 10
                                 font.bold: true
                             }
@@ -218,7 +224,7 @@ ApplicationWindow {
                             Label {
                                 Layout.fillWidth: true
                                 text: tree.selectedDetail
-                                color: "#c5d0c1"
+                                color: Theme.textDark
                                 wrapMode: Text.Wrap
                             }
 
@@ -236,8 +242,8 @@ ApplicationWindow {
                                 visible: tree.selectedRequiresContents
                                 implicitHeight: contentsStatus.implicitHeight + 24
                                 radius: 8
-                                color: "#26352b"
-                                border.color: "#4c624f"
+                                color: Theme.noticeSurface
+                                border.color: Theme.noticeAccent
 
                                 ColumnLayout {
                                     id: contentsStatus
@@ -248,7 +254,7 @@ ApplicationWindow {
                                     Label {
                                         Layout.fillWidth: true
                                         text: tree.selectedDirectoryState
-                                        color: "#f2d58f"
+                                        color: Theme.noticeAccent
                                         font.bold: true
                                     }
 
@@ -256,7 +262,8 @@ ApplicationWindow {
                                         Layout.fillWidth: true
                                         text: tree.selectedDirectoryStatus
                                               || "Tree View is showing a bounded sample."
-                                        color: "#b8c3b3"
+                                        color: Theme.textLight
+                                        opacity: 0.84
                                         wrapMode: Text.Wrap
                                     }
                                 }
@@ -268,7 +275,7 @@ ApplicationWindow {
                                       + " of "
                                       + Number(tree.selectedTotalChildCount).toLocaleString()
                                       + " entries available"
-                                color: "#c5d0c1"
+                                color: Theme.textDark
                                 font.pixelSize: 12
                                 wrapMode: Text.Wrap
                             }
@@ -288,14 +295,15 @@ ApplicationWindow {
                                     width: ListView.view.width
                                     height: 34
                                     radius: 5
-                                    color: index % 2 === 0 ? "#202c24" : "transparent"
+                                    color: index % 2 === 0
+                                           ? Theme.raisedSurface : "transparent"
 
                                     Label {
                                         anchors.fill: parent
                                         anchors.leftMargin: 9
                                         anchors.rightMargin: 9
                                         text: parent.modelData
-                                        color: "#d4ddd0"
+                                        color: Theme.textDark
                                         verticalAlignment: Text.AlignVCenter
                                         elide: Text.ElideMiddle
                                     }
@@ -306,7 +314,8 @@ ApplicationWindow {
                                 Layout.fillWidth: true
                                 visible: tree.selectedRequiresContents
                                 text: "The list is a bounded fake sample. Real scanning will load incrementally and remain cancellable."
-                                color: "#71806f"
+                                color: Theme.textDark
+                                opacity: 0.62
                                 font.pixelSize: 10
                                 wrapMode: Text.Wrap
                             }
@@ -323,7 +332,8 @@ ApplicationWindow {
                 Label {
                     Layout.fillWidth: true
                     text: "Fake filesystem data — no files are being read or changed."
-                    color: "#71806f"
+                    color: Theme.textDark
+                    opacity: 0.58
                     font.pixelSize: 11
                     wrapMode: Text.Wrap
                 }
