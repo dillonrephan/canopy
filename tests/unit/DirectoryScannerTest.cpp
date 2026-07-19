@@ -1,5 +1,6 @@
 #include "DirectoryScanController.h"
 #include "DirectoryScanner.h"
+#include "DirectoryContentsModel.h"
 
 #include <QDir>
 #include <QFile>
@@ -20,6 +21,7 @@ private slots:
     void reportsInvalidPathsLiterally();
     void supportsCancellation();
     void controllerDeliversOnlyTheLatestRequest();
+    void contentsModelPagesWithoutRetainingEarlierPages();
 };
 
 namespace {
@@ -196,6 +198,46 @@ void DirectoryScannerTest::controllerDeliversOnlyTheLatestRequest()
     QCOMPARE(delivered.first().path, temporaryDirectory.path());
     QCOMPARE(delivered.first().state, DirectoryLoadState::Ready);
     QCOMPARE(delivered.first().totalEntryCount, quint64(1));
+}
+
+void DirectoryScannerTest::contentsModelPagesWithoutRetainingEarlierPages()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    QDir root(temporaryDirectory.path());
+    for (int index = 0; index < 150; ++index) {
+        createFile(root.filePath(
+            QStringLiteral("entry-%1.txt").arg(index, 3, 10, QLatin1Char('0'))));
+    }
+
+    DirectoryContentsModel model;
+    model.setDirectory(root.path());
+    QTRY_VERIFY_WITH_TIMEOUT(!model.loading(), 3000);
+    QCOMPARE(model.rowCount(), int(DirectoryContentsModel::PageSize));
+    QCOMPARE(model.pageNumber(), 1);
+    QCOMPARE(model.totalEntryCount(), qulonglong(150));
+    QVERIFY(model.canNext());
+    QVERIFY(!model.canPrevious());
+    QCOMPARE(
+        model.data(model.index(0), DirectoryContentsModel::NameRole).toString(),
+        QStringLiteral("entry-000.txt"));
+
+    model.nextPage();
+    QTRY_VERIFY_WITH_TIMEOUT(!model.loading(), 3000);
+    QCOMPARE(model.rowCount(), int(DirectoryContentsModel::PageSize));
+    QCOMPARE(model.pageNumber(), 2);
+    QVERIFY(model.canPrevious());
+    QCOMPARE(
+        model.data(model.index(0), DirectoryContentsModel::NameRole).toString(),
+        QStringLiteral("entry-064.txt"));
+
+    model.previousPage();
+    QTRY_VERIFY_WITH_TIMEOUT(!model.loading(), 3000);
+    QCOMPARE(model.rowCount(), int(DirectoryContentsModel::PageSize));
+    QCOMPARE(model.pageNumber(), 1);
+    QCOMPARE(
+        model.data(model.index(0), DirectoryContentsModel::NameRole).toString(),
+        QStringLiteral("entry-000.txt"));
 }
 
 QTEST_GUILESS_MAIN(DirectoryScannerTest)

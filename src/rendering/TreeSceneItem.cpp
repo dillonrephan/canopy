@@ -77,8 +77,14 @@ TreeSceneItem::TreeSceneItem(QQuickItem *parent)
                 }
                 applyScanUpdate(m_scanningNodeId, scanUpdate);
             });
+    connect(this, &TreeSceneItem::selectionChanged, this, [this] {
+        const FileNode *selected = node(m_navigation.selectedId());
+        m_contentsModel.setDirectory(
+            selected && selected->isDirectory() ? selected->path : QString());
+    });
 
     relayout();
+    m_contentsModel.setDirectory(homePath);
     scanDirectory(1);
 }
 
@@ -277,21 +283,6 @@ QString TreeSceneItem::selectedDirectoryStatus() const
     const FileNode *selected = node(m_navigation.selectedId());
     return selected && selected->isDirectory()
         ? selected->directoryStatus : QString();
-}
-
-QStringList TreeSceneItem::selectedChildNames() const
-{
-    QStringList names;
-    const FileNode *selected = node(m_navigation.selectedId());
-    if (!selected || !selected->isDirectory())
-        return names;
-
-    names.reserve(selected->children.size());
-    for (const NodeId childId : selected->children) {
-        if (const FileNode *child = node(childId))
-            names.append(child->name);
-    }
-    return names;
 }
 
 QString TreeSceneItem::breadcrumb() const

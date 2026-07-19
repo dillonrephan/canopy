@@ -27,6 +27,8 @@ qt_add_qml_module(canopy
         src/filesystem/DirectoryScanner.h
         src/filesystem/DirectoryScanController.cpp
         src/filesystem/DirectoryScanController.h
+        src/filesystem/DirectoryContentsModel.cpp
+        src/filesystem/DirectoryContentsModel.h
         src/model/DirectoryPresentationPolicy.cpp
         src/model/DirectoryPresentationPolicy.h
         src/model/FileNode.h
@@ -77,6 +79,7 @@ if(BUILD_TESTING)
 
     qt_add_executable(canopy_directory_scanner_tests
         tests/unit/DirectoryScannerTest.cpp
+        src/filesystem/DirectoryContentsModel.cpp
         src/filesystem/DirectoryScanController.cpp
         src/filesystem/DirectoryScanner.cpp
     )

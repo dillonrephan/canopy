@@ -367,15 +367,7 @@ ApplicationWindow {
 
                             Label {
                                 Layout.fillWidth: true
-                                text: tree.selectedDirectoryState === "Still scanning"
-                                      ? Number(tree.selectedMaterializedChildCount).toLocaleString()
-                                        + " shown · at least "
-                                        + Number(tree.selectedTotalChildCount).toLocaleString()
-                                        + " discovered"
-                                      : Number(tree.selectedMaterializedChildCount).toLocaleString()
-                                        + " of "
-                                        + Number(tree.selectedTotalChildCount).toLocaleString()
-                                        + " entries available"
+                                text: tree.contentsModel.rangeLabel
                                 color: Theme.textDark
                                 font.pixelSize: 12
                                 wrapMode: Text.Wrap
@@ -387,26 +379,120 @@ ApplicationWindow {
                                 Layout.fillHeight: true
                                 clip: true
                                 spacing: 2
-                                model: tree.selectedChildNames
+                                model: tree.contentsModel
                                 ScrollBar.vertical: ScrollBar {}
 
                                 delegate: Rectangle {
-                                    required property string modelData
+                                    id: contentsDelegate
+                                    required property string entryName
+                                    required property string entryDetail
+                                    required property bool entryIsDirectory
                                     required property int index
                                     width: ListView.view.width
-                                    height: 34
+                                    height: 42
                                     radius: 5
                                     color: index % 2 === 0
                                            ? Theme.raisedSurface : "transparent"
 
-                                    Label {
+                                    RowLayout {
                                         anchors.fill: parent
                                         anchors.leftMargin: 9
                                         anchors.rightMargin: 9
-                                        text: parent.modelData
+                                        spacing: 8
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 0
+
+                                            Label {
+                                                Layout.fillWidth: true
+                                                text: contentsDelegate.entryName
+                                                color: Theme.textDark
+                                                elide: Text.ElideMiddle
+                                            }
+
+                                            Label {
+                                                Layout.fillWidth: true
+                                                text: contentsDelegate.entryDetail
+                                                color: Theme.textDark
+                                                opacity: 0.56
+                                                font.pixelSize: 9
+                                                elide: Text.ElideMiddle
+                                            }
+                                        }
+
+                                        Label {
+                                            visible: contentsDelegate.entryIsDirectory
+                                            text: "branch"
+                                            color: Theme.textDark
+                                            opacity: 0.52
+                                            font.pixelSize: 9
+                                        }
+                                    }
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+
+                                Button {
+                                    id: previousPageButton
+                                    text: "Previous"
+                                    enabled: tree.contentsModel.canPrevious
+                                    onClicked: tree.contentsModel.previousPage()
+
+                                    contentItem: Label {
+                                        text: previousPageButton.text
                                         color: Theme.textDark
+                                        opacity: previousPageButton.enabled ? 1 : 0.42
+                                        horizontalAlignment: Text.AlignHCenter
                                         verticalAlignment: Text.AlignVCenter
-                                        elide: Text.ElideMiddle
+                                    }
+
+                                    background: Rectangle {
+                                        implicitHeight: 34
+                                        radius: 10
+                                        color: previousPageButton.hovered
+                                               ? Theme.raisedSurface
+                                               : Theme.shellSurface
+                                        border.color: Theme.border
+                                    }
+                                }
+
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: tree.contentsModel.loading
+                                          ? "Loading page "
+                                            + tree.contentsModel.pageNumber + "…"
+                                          : "Page " + tree.contentsModel.pageNumber
+                                    color: Theme.textDark
+                                    opacity: 0.62
+                                    horizontalAlignment: Text.AlignHCenter
+                                    font.pixelSize: 10
+                                }
+
+                                Button {
+                                    id: nextPageButton
+                                    text: "Next"
+                                    enabled: tree.contentsModel.canNext
+                                    onClicked: tree.contentsModel.nextPage()
+
+                                    contentItem: Label {
+                                        text: nextPageButton.text
+                                        color: Theme.textDark
+                                        opacity: nextPageButton.enabled ? 1 : 0.42
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+
+                                    background: Rectangle {
+                                        implicitHeight: 34
+                                        radius: 10
+                                        color: nextPageButton.hovered
+                                               ? Theme.raisedSurface
+                                               : Theme.shellSurface
+                                        border.color: Theme.border
                                     }
                                 }
                             }
@@ -414,7 +500,7 @@ ApplicationWindow {
                             Label {
                                 Layout.fillWidth: true
                                 visible: tree.selectedRequiresContents
-                                text: "This is a bounded, read-only view. Hidden entries are not shown yet."
+                                text: "Pages stay memory-bounded. Hidden entries are not shown yet."
                                 color: Theme.textDark
                                 opacity: 0.62
                                 font.pixelSize: 10

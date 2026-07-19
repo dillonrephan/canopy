@@ -1,6 +1,7 @@
 #pragma once
 
 #include "FileNode.h"
+#include "DirectoryContentsModel.h"
 #include "DirectoryScanController.h"
 #include "NavigationState.h"
 #include "TreeLayoutEngine.h"
@@ -32,7 +33,7 @@ class TreeSceneItem : public QQuickPaintedItem
     Q_PROPERTY(qulonglong selectedMaterializedChildCount READ selectedMaterializedChildCount NOTIFY selectionChanged)
     Q_PROPERTY(bool selectedRequiresContents READ selectedRequiresContents NOTIFY selectionChanged)
     Q_PROPERTY(QString selectedDirectoryStatus READ selectedDirectoryStatus NOTIFY selectionChanged)
-    Q_PROPERTY(QStringList selectedChildNames READ selectedChildNames NOTIFY selectionChanged)
+    Q_PROPERTY(DirectoryContentsModel *contentsModel READ contentsModel CONSTANT)
     Q_PROPERTY(QString breadcrumb READ breadcrumb NOTIFY navigationChanged)
     Q_PROPERTY(qreal zoom READ zoom NOTIFY cameraChanged)
     Q_PROPERTY(bool canGoBack READ canGoBack NOTIFY navigationChanged)
@@ -54,7 +55,10 @@ public:
     [[nodiscard]] qulonglong selectedMaterializedChildCount() const;
     [[nodiscard]] bool selectedRequiresContents() const;
     [[nodiscard]] QString selectedDirectoryStatus() const;
-    [[nodiscard]] QStringList selectedChildNames() const;
+    [[nodiscard]] DirectoryContentsModel *contentsModel() noexcept
+    {
+        return &m_contentsModel;
+    }
     [[nodiscard]] QString breadcrumb() const;
     [[nodiscard]] qreal zoom() const noexcept { return m_zoom; }
     [[nodiscard]] bool canGoBack() const noexcept { return m_navigation.canGoBack(); }
@@ -104,6 +108,7 @@ private:
     QVector<LayoutNode> m_layout;
     TreeLayoutEngine m_layoutEngine;
     NavigationState m_navigation {1};
+    DirectoryContentsModel m_contentsModel;
     DirectoryScanController m_scanController;
     QHash<NodeId, QPointF> m_previousPositions;
     QVariantAnimation m_focusAnimation;

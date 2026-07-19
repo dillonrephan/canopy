@@ -48,38 +48,43 @@ DirectoryScanResult DirectoryScanner::scan(
     QVector<ScannedEntry> pendingEntries;
     pendingEntries.reserve(kGrowthBatchSize);
 
-    QDirIterator iterator(
-        result.path,
-        QDir::AllEntries | QDir::NoDotAndDotDot,
-        QDirIterator::NoIteratorFlags);
-    while (iterator.hasNext()) {
-        if (shouldCancel && shouldCancel()) {
-            result.cancelled = true;
-            result.status = QStringLiteral("Scan cancelled.");
-            return result;
-        }
+    const QDir::Filters scanPasses[] {
+        QDir::Dirs | QDir::NoDotAndDotDot,
+        QDir::Files | QDir::System | QDir::NoDotAndDotDot
+    };
+    for (const QDir::Filters filters : scanPasses) {
+        QDirIterator iterator(
+            result.path, filters, QDirIterator::NoIteratorFlags);
+        while (iterator.hasNext()) {
+            if (shouldCancel && shouldCancel()) {
+                result.cancelled = true;
+                result.status = QStringLiteral("Scan cancelled.");
+                return result;
+            }
 
-        iterator.next();
-        const QFileInfo info = iterator.fileInfo();
-        if (!info.exists() && !info.isSymbolicLink())
-            continue;
+            iterator.next();
+            const QFileInfo info = iterator.fileInfo();
+            if (!info.exists() && !info.isSymbolicLink())
+                continue;
 
-        ++result.totalEntryCount;
-        if (result.entries.size() < materializedEntryLimit) {
-            ScannedEntry entry = makeEntry(info);
-            result.entries.append(entry);
-            pendingEntries.append(std::move(entry));
-        }
+            ++result.totalEntryCount;
+            if (result.entries.size() < materializedEntryLimit) {
+                ScannedEntry entry = makeEntry(info);
+                result.entries.append(entry);
+                pendingEntries.append(std::move(entry));
+            }
 
-        const bool batchReady = pendingEntries.size() == kGrowthBatchSize;
-        const bool progressReady = result.totalEntryCount % kProgressInterval == 0;
-        if (onUpdate && (batchReady || progressReady)) {
-            onUpdate({
-                .path = result.path,
-                .entries = std::exchange(pendingEntries, {}),
-                .discoveredEntryCount = result.totalEntryCount
-            });
-            pendingEntries.reserve(kGrowthBatchSize);
+            const bool batchReady = pendingEntries.size() == kGrowthBatchSize;
+            const bool progressReady =
+                result.totalEntryCount % kProgressInterval == 0;
+            if (onUpdate && (batchReady || progressReady)) {
+                onUpdate({
+                    .path = result.path,
+                    .entries = std::exchange(pendingEntries, {}),
+                    .discoveredEntryCount = result.totalEntryCount
+                });
+                pendingEntries.reserve(kGrowthBatchSize);
+            }
         }
     }
 
