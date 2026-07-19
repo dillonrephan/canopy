@@ -147,7 +147,10 @@ NodeId FilesystemTreeModel::ensureDirectory(
         parentId = id;
     }
 
-    emit treeChanged();
+    emit treeChanged({
+        .reason = TreeChangeReason::Reset,
+        .directoryId = parentId
+    });
     return parentId;
 }
 
@@ -214,7 +217,10 @@ void FilesystemTreeModel::scanDirectory(NodeId id)
         directory->path,
         DirectoryPresentationPolicy::VisualChildLimit,
         m_includeHidden);
-    emit treeChanged();
+    emit treeChanged({
+        .reason = TreeChangeReason::Loading,
+        .directoryId = id
+    });
 }
 
 void FilesystemTreeModel::applyScanUpdate(
@@ -228,8 +234,12 @@ void FilesystemTreeModel::applyScanUpdate(
     directory->directoryState = DirectoryLoadState::Loading;
     directory->directoryStatus = QStringLiteral("Discovered at least %1 entries…")
                                      .arg(update.discoveredEntryCount);
-    appendScannedEntries(id, update.entries);
-    emit treeChanged();
+    const QVector<NodeId> added = appendScannedEntries(id, update.entries);
+    emit treeChanged({
+        .reason = TreeChangeReason::Progress,
+        .directoryId = id,
+        .added = added
+    });
 }
 
 void FilesystemTreeModel::applyScanResult(
@@ -239,20 +249,33 @@ void FilesystemTreeModel::applyScanResult(
     if (!directory)
         return;
 
+    const QVector<NodeId> previousChildren = directory->children;
     directory->children.clear();
     directory->totalChildCount = result.totalEntryCount;
     directory->directoryState = result.state;
     directory->directoryStatus = result.status;
-    appendScannedEntries(id, result.entries);
-    emit treeChanged();
+    const QVector<NodeId> added = appendScannedEntries(id, result.entries);
+    directory = mutableNode(id);
+    QVector<NodeId> removed;
+    for (const NodeId previousId : previousChildren) {
+        if (!directory->children.contains(previousId))
+            removed.append(previousId);
+    }
+    emit treeChanged({
+        .reason = TreeChangeReason::Reconciled,
+        .directoryId = id,
+        .added = added,
+        .removed = removed
+    });
 }
 
-void FilesystemTreeModel::appendScannedEntries(
+QVector<NodeId> FilesystemTreeModel::appendScannedEntries(
     NodeId id, const QVector<ScannedEntry> &entries)
 {
+    QVector<NodeId> added;
     FileNode *directory = mutableNode(id);
     if (!directory)
-        return;
+        return added;
 
     for (const ScannedEntry &entry : entries) {
         const auto existing = std::find_if(
@@ -285,8 +308,10 @@ void FilesystemTreeModel::appendScannedEntries(
         }
 
         directory = mutableNode(id);
-        if (!directory->children.contains(childId))
+        if (!directory->children.contains(childId)) {
             directory->children.append(childId);
+            added.append(childId);
+        }
     }
 
     directory = mutableNode(id);
@@ -304,6 +329,7 @@ void FilesystemTreeModel::appendScannedEntries(
             return insensitive == 0 ? left->name < right->name
                                     : insensitive < 0;
         });
+    return added;
 }
 
 void FilesystemTreeModel::updateWatchedDirectories()

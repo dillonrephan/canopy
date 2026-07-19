@@ -46,7 +46,7 @@ TreeSceneItem::TreeSceneItem(QQuickItem *parent)
         update();
     });
     connect(&m_filesystemModel, &FilesystemTreeModel::treeChanged,
-            this, [this] {
+            this, [this](const TreeChangeSet &) {
                 relayout();
                 emit selectionChanged();
             });

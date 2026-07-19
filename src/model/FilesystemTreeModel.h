@@ -10,6 +10,22 @@
 #include <QTimer>
 #include <QVector>
 
+enum class TreeChangeReason {
+    Reset,
+    Loading,
+    Progress,
+    Reconciled
+};
+
+struct TreeChangeSet {
+    TreeChangeReason reason = TreeChangeReason::Reset;
+    NodeId directoryId = InvalidNodeId;
+    QVector<NodeId> added;
+    QVector<NodeId> removed;
+};
+
+Q_DECLARE_METATYPE(TreeChangeSet)
+
 class FilesystemTreeModel final : public QObject
 {
     Q_OBJECT
@@ -39,14 +55,15 @@ public:
     [[nodiscard]] bool includeHidden() const noexcept { return m_includeHidden; }
 
 signals:
-    void treeChanged();
+    void treeChanged(const TreeChangeSet &change);
     void liveDirectoryChanged(const QString &path);
 
 private:
     void scanDirectory(NodeId id);
     void applyScanUpdate(NodeId id, const DirectoryScanUpdate &update);
     void applyScanResult(NodeId id, const DirectoryScanResult &result);
-    void appendScannedEntries(NodeId id, const QVector<ScannedEntry> &entries);
+    [[nodiscard]] QVector<NodeId> appendScannedEntries(
+        NodeId id, const QVector<ScannedEntry> &entries);
     void updateWatchedDirectories();
     void processWatchedChanges();
     [[nodiscard]] NodeId nodeIdForPath(const QString &path) const;

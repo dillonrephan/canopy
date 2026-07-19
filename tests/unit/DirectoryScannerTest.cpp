@@ -309,6 +309,11 @@ void DirectoryScannerTest::filesystemModelObservesExternalDirectoryChanges()
     QTemporaryDir temporaryDirectory;
     QVERIFY(temporaryDirectory.isValid());
     FilesystemTreeModel model(temporaryDirectory.path());
+    QVector<TreeChangeSet> changes;
+    connect(&model, &FilesystemTreeModel::treeChanged,
+            this, [&changes](const TreeChangeSet &change) {
+                changes.append(change);
+            });
 
     QTRY_COMPARE_WITH_TIMEOUT(
         model.node(model.rootId())->directoryState,
@@ -328,6 +333,9 @@ void DirectoryScannerTest::filesystemModelObservesExternalDirectoryChanges()
         5000);
     QTRY_COMPARE_WITH_TIMEOUT(
         model.node(model.rootId())->totalChildCount, quint64(1), 5000);
+    QVERIFY(std::ranges::any_of(changes, [](const TreeChangeSet &change) {
+        return !change.added.isEmpty();
+    }));
 
     const QString renamedPath =
         temporaryDirectory.filePath(QStringLiteral("flower.txt"));
@@ -350,6 +358,9 @@ void DirectoryScannerTest::filesystemModelObservesExternalDirectoryChanges()
     QVERIFY(QFile::remove(renamedPath));
     QTRY_COMPARE_WITH_TIMEOUT(
         model.node(model.rootId())->totalChildCount, quint64(0), 5000);
+    QVERIFY(std::ranges::any_of(changes, [](const TreeChangeSet &change) {
+        return !change.removed.isEmpty();
+    }));
     QVERIFY(std::ranges::none_of(
         model.node(model.rootId())->children,
         [&model, &sproutPath](NodeId childId) {
