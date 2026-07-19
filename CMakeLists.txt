@@ -23,6 +23,8 @@ qt_add_qml_module(canopy
     SOURCES
         src/layout/TreeLayoutEngine.cpp
         src/layout/TreeLayoutEngine.h
+        src/filesystem/DirectoryScanner.cpp
+        src/filesystem/DirectoryScanner.h
         src/model/DirectoryPresentationPolicy.cpp
         src/model/DirectoryPresentationPolicy.h
         src/model/FakeTreeData.cpp
@@ -45,6 +47,7 @@ target_link_libraries(canopy PRIVATE
 
 target_include_directories(canopy PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/layout
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/filesystem
     ${CMAKE_CURRENT_SOURCE_DIR}/src/model
     ${CMAKE_CURRENT_SOURCE_DIR}/src/navigation
     ${CMAKE_CURRENT_SOURCE_DIR}/src/rendering
@@ -70,6 +73,20 @@ if(BUILD_TESTING)
     )
     target_link_libraries(canopy_unit_tests PRIVATE Qt6::Test)
     add_test(NAME canopy_unit_tests COMMAND canopy_unit_tests)
+
+    qt_add_executable(canopy_directory_scanner_tests
+        tests/unit/DirectoryScannerTest.cpp
+        src/filesystem/DirectoryScanner.cpp
+    )
+    target_include_directories(canopy_directory_scanner_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/filesystem
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/model
+    )
+    target_link_libraries(canopy_directory_scanner_tests PRIVATE Qt6::Test)
+    add_test(
+        NAME canopy_directory_scanner_tests
+        COMMAND canopy_directory_scanner_tests
+    )
 endif()
 
 install(TARGETS canopy
