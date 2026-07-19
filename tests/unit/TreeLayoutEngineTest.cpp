@@ -25,6 +25,8 @@ private slots:
     void closeZoomRevealsOnlyNonOverlappingDescendants();
     void navigationStateTracksSelectionAndHistory();
     void layoutProvidesConnectedBranchGeometry();
+    void directChildrenUseStaggeredCorridors();
+    void corridorsRemainStableWhenChildIsAdded();
     void fixtureTracksDirectoryCountsAndStates();
     void presentationPolicyBoundsExtremeDirectory();
     void layoutBoundsMaterializedExtremeChildren();
@@ -245,7 +247,73 @@ void TreeLayoutEngineTest::layoutProvidesConnectedBranchGeometry()
                 return candidate.id == node.parentId;
             });
         QVERIFY(parent != layout.cend());
-        QCOMPARE(node.branchStart, parent->position);
+        if (node.followsParentPosition) {
+            QCOMPARE(node.branchStart, parent->position);
+        } else {
+            QCOMPARE(node.branchStart.x(), parent->position.x());
+            QVERIFY(node.branchStart.y() < parent->position.y());
+            QVERIFY(node.branchStart.y() >= parent->crownEnd.y());
+        }
+    }
+}
+
+void TreeLayoutEngineTest::directChildrenUseStaggeredCorridors()
+{
+    const QVector<FileNode> nodes = FakeTreeData::create();
+    const TreeLayoutEngine engine;
+    const QVector<LayoutNode> layout = engine.layout(nodes, 1);
+    const auto focused = std::ranges::find_if(
+        layout, [](const LayoutNode &node) { return node.id == NodeId(1); });
+    QVERIFY(focused != layout.cend());
+    QVERIFY(focused->crownEnd.y() < focused->position.y());
+
+    QSet<int> corridorSlots;
+    QSet<qreal> attachmentHeights;
+    for (const LayoutNode &node : layout) {
+        if (node.parentId != NodeId(1))
+            continue;
+        QVERIFY(!node.followsParentPosition);
+        QVERIFY(node.corridorSlot >= 0);
+        QVERIFY(node.depthLayer >= 1);
+        corridorSlots.insert(node.corridorSlot);
+        attachmentHeights.insert(node.branchStart.y());
+    }
+
+    QCOMPARE(corridorSlots.size(), 5);
+    QCOMPARE(attachmentHeights.size(), 5);
+}
+
+void TreeLayoutEngineTest::corridorsRemainStableWhenChildIsAdded()
+{
+    QVector<FileNode> nodes = FakeTreeData::create();
+    TreeLayoutEngine engine;
+    const QVector<LayoutNode> before = engine.layout(nodes, 1);
+    QHash<NodeId, LayoutNode> originalChildren;
+    for (const LayoutNode &node : before) {
+        if (node.parentId == NodeId(1))
+            originalChildren.insert(node.id, node);
+    }
+
+    const NodeId addedId = static_cast<NodeId>(nodes.size() + 1);
+    nodes.first().children.append(addedId);
+    ++nodes.first().totalChildCount;
+    nodes.append({
+        .id = addedId,
+        .parentId = 1,
+        .name = QStringLiteral("New Growth"),
+        .path = QStringLiteral("/home/dillon/New Growth"),
+        .kind = NodeKind::Directory,
+        .detail = QStringLiteral("Live addition")
+    });
+
+    const QVector<LayoutNode> after = engine.layout(nodes, 1);
+    for (const LayoutNode &node : after) {
+        if (!originalChildren.contains(node.id))
+            continue;
+        const LayoutNode original = originalChildren.value(node.id);
+        QCOMPARE(node.position, original.position);
+        QCOMPARE(node.branchStart, original.branchStart);
+        QCOMPARE(node.corridorSlot, original.corridorSlot);
     }
 }
 

@@ -79,6 +79,16 @@ void TreeSceneItem::paint(QPainter *painter)
         labelLayout, m_navigation.focusedId(), m_navigation.selectedId(),
         m_hovered, m_zoom);
 
+    if (const LayoutNode *focusedLayout =
+            layoutNode(m_navigation.focusedId());
+        focusedLayout && focusedLayout->crownEnd != focusedLayout->position) {
+        const QPainterPath crown = drawnCrownPath(*focusedLayout);
+        painter->setPen(QPen(theme.wood,
+                             theme.focusedBranchWidth * 0.72,
+                             Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter->drawPath(crown);
+    }
+
     for (const LayoutNode &layout : m_layout) {
         const FileNode *entry = node(layout.id);
         if (!entry)
@@ -94,10 +104,14 @@ void TreeSceneItem::paint(QPainter *painter)
             branchColor = theme.woodHover;
         if (layout.parentContext)
             branchColor.setAlphaF(0.48);
+        else
+            branchColor.setAlphaF(
+                branchColor.alphaF() * layout.depthOpacity);
 
-        const qreal branchWidth = directory
+        const qreal depthScale = 1.0 - layout.depthLayer * 0.07;
+        const qreal branchWidth = (directory
             ? (focused ? theme.focusedBranchWidth : theme.directoryBranchWidth)
-            : theme.fileStemWidth;
+            : theme.fileStemWidth) * depthScale;
         if (directory && (selected || hovered)) {
             QColor emphasis = selected ? theme.selection : theme.hover;
             if (layout.parentContext)
@@ -123,8 +137,8 @@ void TreeSceneItem::paint(QPainter *painter)
         const qreal radius = layout.radius + (hovered ? 3.0 : 0.0);
 
         painter->save();
-        if (layout.parentContext)
-            painter->setOpacity(0.48);
+        painter->setOpacity(
+            layout.parentContext ? 0.48 : layout.depthOpacity);
         if (entry->kind == NodeKind::Directory) {
             painter->setPen(QPen(selected ? theme.selection : theme.woodShadow,
                                  selected ? 2.5 : 1.5));
@@ -453,6 +467,9 @@ NodeId TreeSceneItem::nodeAt(const QPointF &viewPosition) const
             const QRectF labelBounds = it->labelBounds.translated(
                 drawnPosition(*it) - it->position);
             if (hitStroker.createStroke(drawnBranchPath(*it)).contains(scenePosition)
+                || (it->id == m_navigation.focusedId()
+                    && hitStroker.createStroke(drawnCrownPath(*it))
+                        .contains(scenePosition))
                 || labelBounds.contains(scenePosition)) {
                 return it->id;
             }
@@ -490,8 +507,13 @@ QPainterPath TreeSceneItem::drawnBranchPath(const LayoutNode &layout) const
 {
     const QPointF end = drawnPosition(layout);
     QPointF start = layout.branchStart;
-    if (const LayoutNode *parent = layoutNode(layout.parentId))
-        start = drawnPosition(*parent);
+    if (const LayoutNode *parent = layoutNode(layout.parentId)) {
+        if (layout.followsParentPosition) {
+            start = drawnPosition(*parent);
+        } else {
+            start += drawnPosition(*parent) - parent->position;
+        }
+    }
 
     const QPointF control1 = start
         + (layout.branchControl1 - layout.branchStart);
@@ -499,6 +521,22 @@ QPainterPath TreeSceneItem::drawnBranchPath(const LayoutNode &layout) const
         + (layout.branchControl2 - layout.position);
     QPainterPath result(start);
     result.cubicTo(control1, control2, end);
+    return result;
+}
+
+QPainterPath TreeSceneItem::drawnCrownPath(const LayoutNode &layout) const
+{
+    const QPointF start = drawnPosition(layout);
+    const qreal growth = m_transitionProgress < 1.0
+        ? m_transitionProgress : 1.0;
+    const QPointF end = start
+        + (layout.crownEnd - layout.position) * growth;
+    const QPointF delta = end - start;
+    QPainterPath result(start);
+    result.cubicTo(
+        start + delta * 0.34 + QPointF(-3.0, 0.0),
+        start + delta * 0.72 + QPointF(4.0, 0.0),
+        end);
     return result;
 }
 
