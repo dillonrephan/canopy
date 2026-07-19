@@ -100,7 +100,7 @@ DirectoryScanResult DirectoryScanner::scan(
     if (result.totalEntryCount > static_cast<quint64>(result.entries.size())) {
         result.state = DirectoryLoadState::Partial;
         result.status = QStringLiteral(
-            "Showing the first %1 of %2 entries. The scan remained memory-bounded.")
+            "Showing %1 of %2 entries. The scan remained memory-bounded.")
                             .arg(result.entries.size())
                             .arg(result.totalEntryCount);
     } else {
