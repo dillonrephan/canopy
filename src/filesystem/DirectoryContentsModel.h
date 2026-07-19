@@ -57,8 +57,10 @@ public:
     }
     [[nodiscard]] QString rangeLabel() const;
     [[nodiscard]] QString status() const { return m_status; }
+    [[nodiscard]] bool includeHidden() const noexcept { return m_includeHidden; }
 
     void setDirectory(const QString &path);
+    void setIncludeHidden(bool includeHidden);
     Q_INVOKABLE void nextPage();
     Q_INVOKABLE void previousPage();
     Q_INVOKABLE void reload();
@@ -80,4 +82,5 @@ private:
     int m_pageIndex = 0;
     bool m_loading = false;
     bool m_hasNextPage = false;
+    bool m_includeHidden = false;
 };

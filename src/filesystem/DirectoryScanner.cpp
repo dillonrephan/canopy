@@ -21,7 +21,8 @@ DirectoryScanResult DirectoryScanner::scan(
     const QString &path,
     qsizetype materializedEntryLimit,
     const std::function<bool()> &shouldCancel,
-    const std::function<void(const DirectoryScanUpdate &)> &onUpdate)
+    const std::function<void(const DirectoryScanUpdate &)> &onUpdate,
+    bool includeHidden)
 {
     DirectoryScanResult result;
     const QFileInfo directoryInfo(path);
@@ -48,9 +49,11 @@ DirectoryScanResult DirectoryScanner::scan(
     QVector<ScannedEntry> pendingEntries;
     pendingEntries.reserve(kGrowthBatchSize);
 
+    const QDir::Filters hiddenFilter =
+        includeHidden ? QDir::Filters(QDir::Hidden) : QDir::Filters {};
     const QDir::Filters scanPasses[] {
-        QDir::Dirs | QDir::NoDotAndDotDot,
-        QDir::Files | QDir::System | QDir::NoDotAndDotDot
+        QDir::Dirs | QDir::NoDotAndDotDot | hiddenFilter,
+        QDir::Files | QDir::System | QDir::NoDotAndDotDot | hiddenFilter
     };
     for (const QDir::Filters filters : scanPasses) {
         QDirIterator iterator(
@@ -116,7 +119,8 @@ DirectoryPageResult DirectoryScanner::scanPage(
     const QString &path,
     const QString &afterCursor,
     qsizetype pageSize,
-    const std::function<bool()> &shouldCancel)
+    const std::function<bool()> &shouldCancel,
+    bool includeHidden)
 {
     DirectoryPageResult result;
     const QFileInfo directoryInfo(path);
@@ -143,7 +147,9 @@ DirectoryPageResult DirectoryScanner::scanPage(
     quint64 eligibleEntryCount = 0;
     QDirIterator iterator(
         result.path,
-        QDir::AllEntries | QDir::NoDotAndDotDot,
+        QDir::AllEntries | QDir::NoDotAndDotDot
+            | (includeHidden
+                   ? QDir::Filters(QDir::Hidden) : QDir::Filters {}),
         QDirIterator::NoIteratorFlags);
     while (iterator.hasNext()) {
         if (shouldCancel && shouldCancel()) {

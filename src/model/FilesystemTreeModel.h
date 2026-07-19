@@ -33,6 +33,8 @@ public:
 
     void setActiveDirectory(NodeId id);
     void setContentsDirectory(NodeId id);
+    void setIncludeHidden(bool includeHidden);
+    [[nodiscard]] bool includeHidden() const noexcept { return m_includeHidden; }
 
 signals:
     void treeChanged();
@@ -57,4 +59,5 @@ private:
     NodeId m_scanningNodeId = InvalidNodeId;
     NodeId m_nextNodeId = 2;
     quint64 m_activeScanRequest = 0;
+    bool m_includeHidden = false;
 };

@@ -19,6 +19,7 @@ private slots:
     void boundsMaterializedEntriesWhileCountingAll();
     void emitsIncrementalBoundedGrowth();
     void scansDeterministicPagesWithoutGrowingMemory();
+    void hiddenEntriesFollowVisibilityPolicy();
     void reportsInvalidPathsLiterally();
     void supportsCancellation();
     void controllerDeliversOnlyTheLatestRequest();
@@ -147,6 +148,38 @@ void DirectoryScannerTest::scansDeterministicPagesWithoutGrowingMemory()
     QCOMPARE(second.entries.first().name, QStringLiteral("entry-10.txt"));
     QCOMPARE(second.entries.last().name, QStringLiteral("entry-19.txt"));
     QVERIFY(second.hasNextPage);
+}
+
+void DirectoryScannerTest::hiddenEntriesFollowVisibilityPolicy()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    createFile(
+        temporaryDirectory.filePath(QStringLiteral("visible.txt")), "visible");
+    createFile(
+        temporaryDirectory.filePath(QStringLiteral(".secret.txt")), "hidden");
+
+    const DirectoryScanResult defaultScan =
+        DirectoryScanner::scan(temporaryDirectory.path());
+    QCOMPARE(defaultScan.totalEntryCount, quint64(1));
+
+    const DirectoryScanResult hiddenScan = DirectoryScanner::scan(
+        temporaryDirectory.path(),
+        DirectoryScanner::DefaultMaterializedEntryLimit,
+        {},
+        {},
+        true);
+    QCOMPARE(hiddenScan.totalEntryCount, quint64(2));
+
+    FilesystemTreeModel model(temporaryDirectory.path());
+    QTRY_COMPARE_WITH_TIMEOUT(
+        model.node(model.rootId())->totalChildCount, quint64(1), 3000);
+    model.setContentsDirectory(model.rootId());
+    model.setIncludeHidden(true);
+    QTRY_COMPARE_WITH_TIMEOUT(
+        model.node(model.rootId())->totalChildCount, quint64(2), 3000);
+    QTRY_COMPARE_WITH_TIMEOUT(
+        model.contentsModel()->totalEntryCount(), qulonglong(2), 3000);
 }
 
 void DirectoryScannerTest::reportsInvalidPathsLiterally()

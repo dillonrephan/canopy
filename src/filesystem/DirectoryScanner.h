@@ -54,13 +54,15 @@ public:
         const QString &path,
         qsizetype materializedEntryLimit = DefaultMaterializedEntryLimit,
         const std::function<bool()> &shouldCancel = {},
-        const std::function<void(const DirectoryScanUpdate &)> &onUpdate = {});
+        const std::function<void(const DirectoryScanUpdate &)> &onUpdate = {},
+        bool includeHidden = false);
 
     [[nodiscard]] static DirectoryPageResult scanPage(
         const QString &path,
         const QString &afterCursor,
         qsizetype pageSize,
-        const std::function<bool()> &shouldCancel = {});
+        const std::function<bool()> &shouldCancel = {},
+        bool includeHidden = false);
 
 private:
     [[nodiscard]] static NodeKind classify(const QFileInfo &entry);

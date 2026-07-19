@@ -106,6 +106,16 @@ void FilesystemTreeModel::setContentsDirectory(NodeId id)
     updateWatchedDirectories();
 }
 
+void FilesystemTreeModel::setIncludeHidden(bool includeHidden)
+{
+    if (m_includeHidden == includeHidden)
+        return;
+    m_includeHidden = includeHidden;
+    m_contentsModel.setIncludeHidden(includeHidden);
+    if (m_activeDirectoryId != InvalidNodeId)
+        scanDirectory(m_activeDirectoryId);
+}
+
 void FilesystemTreeModel::scanDirectory(NodeId id)
 {
     FileNode *directory = mutableNode(id);
@@ -131,7 +141,9 @@ void FilesystemTreeModel::scanDirectory(NodeId id)
     directory->directoryStatus = QStringLiteral("Reading directory contents…");
     m_scanningNodeId = id;
     m_activeScanRequest = m_scanController.requestScan(
-        directory->path, DirectoryPresentationPolicy::VisualChildLimit);
+        directory->path,
+        DirectoryPresentationPolicy::VisualChildLimit,
+        m_includeHidden);
     emit treeChanged();
 }
 

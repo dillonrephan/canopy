@@ -17,7 +17,8 @@ DirectoryScanController::~DirectoryScanController()
 
 quint64 DirectoryScanController::requestScan(
     const QString &path,
-    qsizetype materializedEntryLimit)
+    qsizetype materializedEntryLimit,
+    bool includeHidden)
 {
     const quint64 requestId = m_generation->fetch_add(1) + 1;
     const auto generation = m_generation;
@@ -42,7 +43,7 @@ quint64 DirectoryScanController::requestScan(
             });
 
     watcher->setFuture(QtConcurrent::run(
-        [path, materializedEntryLimit, requestId, generation](
+        [path, materializedEntryLimit, includeHidden, requestId, generation](
             QPromise<DirectoryScanUpdate> &promise) {
             const DirectoryScanResult result = DirectoryScanner::scan(
                 path,
@@ -52,7 +53,8 @@ quint64 DirectoryScanController::requestScan(
                 },
                 [&promise](const DirectoryScanUpdate &update) {
                     promise.addResult(update);
-                });
+                },
+                includeHidden);
             if (!result.cancelled && generation->load() == requestId) {
                 promise.addResult({
                     .path = result.path,

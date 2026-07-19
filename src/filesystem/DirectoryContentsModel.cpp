@@ -88,6 +88,15 @@ void DirectoryContentsModel::setDirectory(const QString &path)
     loadCurrentPage();
 }
 
+void DirectoryContentsModel::setIncludeHidden(bool includeHidden)
+{
+    if (m_includeHidden == includeHidden)
+        return;
+    m_includeHidden = includeHidden;
+    if (!m_directoryPath.isEmpty())
+        reload();
+}
+
 void DirectoryContentsModel::nextPage()
 {
     if (!canNext() || m_entries.isEmpty())
@@ -126,6 +135,7 @@ void DirectoryContentsModel::loadCurrentPage()
     const auto generation = m_generation;
     const QString path = m_directoryPath;
     const QString cursor = m_pageCursors.value(m_pageIndex);
+    const bool includeHidden = m_includeHidden;
     m_loading = true;
     m_status = QStringLiteral("Reading a bounded page…");
     clearEntries();
@@ -141,11 +151,12 @@ void DirectoryContentsModel::loadCurrentPage()
                 applyPage(result);
             });
     watcher->setFuture(QtConcurrent::run(
-        [path, cursor, requestId, generation] {
+        [path, cursor, includeHidden, requestId, generation] {
             return DirectoryScanner::scanPage(
                 path, cursor, PageSize, [requestId, generation] {
                     return generation->load() != requestId;
-                });
+                },
+                includeHidden);
         }));
 }
 

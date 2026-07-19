@@ -18,7 +18,8 @@ public:
     quint64 requestScan(
         const QString &path,
         qsizetype materializedEntryLimit =
-            DirectoryScanner::DefaultMaterializedEntryLimit);
+            DirectoryScanner::DefaultMaterializedEntryLimit,
+        bool includeHidden = false);
     void cancel();
 
 signals:
