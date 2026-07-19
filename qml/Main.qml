@@ -409,7 +409,7 @@ ApplicationWindow {
                             Label {
                                 Layout.fillWidth: true
                                 visible: tree.selectedRequiresContents
-                                text: "The list is a bounded fake sample. Real scanning will load incrementally and remain cancellable."
+                                text: "This is a bounded, read-only view. Hidden entries are not shown yet."
                                 color: Theme.textDark
                                 opacity: 0.62
                                 font.pixelSize: 10
@@ -456,7 +456,7 @@ ApplicationWindow {
 
                 Label {
                     Layout.fillWidth: true
-                    text: "Fake filesystem data — no files are being read or changed."
+                    text: "Read-only filesystem view — Canopy never changes files."
                     color: Theme.textDark
                     opacity: 0.58
                     font.pixelSize: 11

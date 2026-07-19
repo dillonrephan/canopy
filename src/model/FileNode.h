@@ -17,6 +17,7 @@ enum class NodeKind {
 };
 
 enum class DirectoryLoadState {
+    Unloaded,
     Ready,
     Loading,
     Partial,
@@ -35,6 +36,7 @@ struct FileNode {
     quint64 totalChildCount = 0;
     DirectoryLoadState directoryState = DirectoryLoadState::Ready;
     QString directoryStatus;
+    bool isSymbolicLink = false;
 
     [[nodiscard]] bool isDirectory() const noexcept
     {

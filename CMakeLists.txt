@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Quick QuickControls2 Test)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Concurrent Quick QuickControls2 Test)
 
 qt_standard_project_setup(REQUIRES 6.8)
 
@@ -25,6 +25,8 @@ qt_add_qml_module(canopy
         src/layout/TreeLayoutEngine.h
         src/filesystem/DirectoryScanner.cpp
         src/filesystem/DirectoryScanner.h
+        src/filesystem/DirectoryScanController.cpp
+        src/filesystem/DirectoryScanController.h
         src/model/DirectoryPresentationPolicy.cpp
         src/model/DirectoryPresentationPolicy.h
         src/model/FakeTreeData.cpp
@@ -41,6 +43,7 @@ qt_add_qml_module(canopy
 )
 
 target_link_libraries(canopy PRIVATE
+    Qt6::Concurrent
     Qt6::Quick
     Qt6::QuickControls2
 )

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "FileNode.h"
+#include "DirectoryScanController.h"
 #include "NavigationState.h"
 #include "TreeLayoutEngine.h"
 
@@ -85,6 +86,7 @@ private:
     [[nodiscard]] QPointF toScene(const QPointF &viewPosition) const;
     [[nodiscard]] NodeId nodeAt(const QPointF &viewPosition) const;
     [[nodiscard]] const FileNode *node(NodeId id) const;
+    [[nodiscard]] FileNode *mutableNode(NodeId id);
     [[nodiscard]] const LayoutNode *layoutNode(NodeId id) const;
     [[nodiscard]] QPointF drawnPosition(const LayoutNode &node) const;
     [[nodiscard]] QPainterPath drawnBranchPath(const LayoutNode &node) const;
@@ -92,12 +94,15 @@ private:
     [[nodiscard]] QColor kindColor(NodeKind kind) const;
     void selectNode(NodeId id);
     void focusNode(NodeId id, bool addToHistory);
+    void scanDirectory(NodeId id);
+    void applyScanResult(NodeId id, const DirectoryScanResult &result);
     void relayout();
 
     QVector<FileNode> m_nodes;
     QVector<LayoutNode> m_layout;
     TreeLayoutEngine m_layoutEngine;
     NavigationState m_navigation {1};
+    DirectoryScanController m_scanController;
     QHash<NodeId, QPointF> m_previousPositions;
     QVariantAnimation m_focusAnimation;
     QPointF m_pan {120.0, 35.0};
@@ -105,6 +110,9 @@ private:
     qreal m_zoom = 1.0;
     qreal m_transitionProgress = 1.0;
     NodeId m_hovered = InvalidNodeId;
+    NodeId m_scanningNodeId = InvalidNodeId;
+    NodeId m_nextNodeId = 2;
+    quint64 m_activeScanRequest = 0;
     bool m_panning = false;
     bool m_reducedMotion = false;
 };

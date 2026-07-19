@@ -1,13 +1,14 @@
 #include "TreeSceneItem.h"
 
 #include "DirectoryPresentationPolicy.h"
-#include "FakeTreeData.h"
 #include "LabelVisibilityPolicy.h"
 #include "ThemeTokens.h"
 
 #include <QColor>
 #include <QCursor>
+#include <QDir>
 #include <QEasingCurve>
+#include <QFileInfo>
 #include <QHoverEvent>
 #include <QLineF>
 #include <QMouseEvent>
@@ -17,6 +18,8 @@
 #include <QWheelEvent>
 #include <QtMath>
 
+#include <algorithm>
+
 namespace {
 constexpr qreal kMinZoom = 0.48;
 constexpr qreal kMaxZoom = 2.4;
@@ -24,8 +27,20 @@ constexpr qreal kMaxZoom = 2.4;
 
 TreeSceneItem::TreeSceneItem(QQuickItem *parent)
     : QQuickPaintedItem(parent)
-    , m_nodes(FakeTreeData::create())
 {
+    const QString homePath = QDir::cleanPath(QDir::homePath());
+    const QString homeName = QFileInfo(homePath).fileName();
+    m_nodes.append({
+        .id = 1,
+        .parentId = InvalidNodeId,
+        .name = homeName.isEmpty() ? QStringLiteral("Home") : homeName,
+        .path = homePath,
+        .kind = NodeKind::Directory,
+        .detail = QStringLiteral("Read-only home directory"),
+        .directoryState = DirectoryLoadState::Loading,
+        .directoryStatus = QStringLiteral("Reading directory contents…")
+    });
+
     setAcceptedMouseButtons(Qt::LeftButton | Qt::MiddleButton);
     setAcceptHoverEvents(true);
     setAntialiasing(true);
@@ -44,8 +59,19 @@ TreeSceneItem::TreeSceneItem(QQuickItem *parent)
         m_previousPositions.clear();
         update();
     });
+    connect(&m_scanController, &DirectoryScanController::scanFinished,
+            this, [this](quint64 requestId, const DirectoryScanResult &result) {
+                if (requestId != m_activeScanRequest
+                    || m_scanningNodeId == InvalidNodeId) {
+                    return;
+                }
+                const NodeId scannedNodeId = m_scanningNodeId;
+                m_scanningNodeId = InvalidNodeId;
+                applyScanResult(scannedNodeId, result);
+            });
 
     relayout();
+    scanDirectory(1);
 }
 
 void TreeSceneItem::paint(QPainter *painter)
@@ -208,6 +234,7 @@ QString TreeSceneItem::selectedDirectoryState() const
         return QString();
 
     switch (selected->directoryState) {
+    case DirectoryLoadState::Unloaded: return QStringLiteral("Not loaded");
     case DirectoryLoadState::Ready: return QStringLiteral("Ready");
     case DirectoryLoadState::Loading: return QStringLiteral("Still scanning");
     case DirectoryLoadState::Partial: return QStringLiteral("Partial results");
@@ -251,11 +278,9 @@ QStringList TreeSceneItem::selectedChildNames() const
     if (!selected || !selected->isDirectory())
         return names;
 
-    const DirectoryPresentation presentation =
-        DirectoryPresentationPolicy::evaluate(*selected);
-    names.reserve(presentation.visibleChildCount);
-    for (qsizetype i = 0; i < presentation.visibleChildCount; ++i) {
-        if (const FileNode *child = node(selected->children.at(i)))
+    names.reserve(selected->children.size());
+    for (const NodeId childId : selected->children) {
+        if (const FileNode *child = node(childId))
             names.append(child->name);
     }
     return names;
@@ -423,6 +448,15 @@ const FileNode *TreeSceneItem::node(NodeId id) const
     return nullptr;
 }
 
+FileNode *TreeSceneItem::mutableNode(NodeId id)
+{
+    for (FileNode &entry : m_nodes) {
+        if (entry.id == id)
+            return &entry;
+    }
+    return nullptr;
+}
+
 const LayoutNode *TreeSceneItem::layoutNode(NodeId id) const
 {
     for (const LayoutNode &entry : m_layout) {
@@ -517,6 +551,81 @@ void TreeSceneItem::focusNode(NodeId id, bool addToHistory)
 
     emit selectionChanged();
     emit navigationChanged();
+
+    if (target->directoryState == DirectoryLoadState::Unloaded)
+        scanDirectory(id);
+}
+
+void TreeSceneItem::scanDirectory(NodeId id)
+{
+    FileNode *directory = mutableNode(id);
+    if (!directory || !directory->isDirectory())
+        return;
+
+    if (m_scanningNodeId != InvalidNodeId && m_scanningNodeId != id) {
+        if (FileNode *stale = mutableNode(m_scanningNodeId);
+            stale && stale->directoryState == DirectoryLoadState::Loading) {
+            stale->directoryState = DirectoryLoadState::Unloaded;
+            stale->directoryStatus = QStringLiteral("Open this branch to scan it.");
+        }
+        m_scanController.cancel();
+    }
+
+    directory->directoryState = DirectoryLoadState::Loading;
+    directory->directoryStatus = QStringLiteral("Reading directory contents…");
+    m_scanningNodeId = id;
+    m_activeScanRequest = m_scanController.requestScan(directory->path);
+    emit selectionChanged();
+    update();
+}
+
+void TreeSceneItem::applyScanResult(
+    NodeId id, const DirectoryScanResult &result)
+{
+    FileNode *directory = mutableNode(id);
+    if (!directory)
+        return;
+
+    directory->children.clear();
+    directory->totalChildCount = result.totalEntryCount;
+    directory->directoryState = result.state;
+    directory->directoryStatus = result.status;
+
+    for (const ScannedEntry &entry : result.entries) {
+        const auto existing = std::find_if(
+            m_nodes.begin(), m_nodes.end(), [&entry](const FileNode &candidate) {
+                return candidate.path == entry.path;
+            });
+        NodeId childId = InvalidNodeId;
+        if (existing != m_nodes.end()) {
+            childId = existing->id;
+            existing->parentId = id;
+            existing->name = entry.name;
+            existing->kind = entry.kind;
+            existing->detail = entry.detail;
+            existing->isSymbolicLink = entry.isSymbolicLink;
+        } else {
+            childId = m_nextNodeId++;
+            m_nodes.append({
+                .id = childId,
+                .parentId = id,
+                .name = entry.name,
+                .path = entry.path,
+                .kind = entry.kind,
+                .detail = entry.detail,
+                .directoryState = entry.kind == NodeKind::Directory
+                    ? DirectoryLoadState::Unloaded : DirectoryLoadState::Ready,
+                .directoryStatus = entry.kind == NodeKind::Directory
+                    ? QStringLiteral("Open this branch to scan it.") : QString(),
+                .isSymbolicLink = entry.isSymbolicLink
+            });
+        }
+        directory = mutableNode(id);
+        directory->children.append(childId);
+    }
+
+    relayout();
+    emit selectionChanged();
 }
 
 void TreeSceneItem::relayout()
