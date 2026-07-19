@@ -23,6 +23,10 @@ qt_add_qml_module(canopy
     SOURCES
         src/layout/TreeLayoutEngine.cpp
         src/layout/TreeLayoutEngine.h
+        src/layout/PlanarProjection.cpp
+        src/layout/PlanarProjection.h
+        src/layout/ProjectedNode.h
+        src/layout/ViewState.h
         src/layout/WorldLayout.h
         src/layout/WorldLayoutEngine.cpp
         src/layout/WorldLayoutEngine.h
@@ -74,6 +78,7 @@ if(BUILD_TESTING)
     qt_add_executable(canopy_unit_tests
         tests/unit/TreeLayoutEngineTest.cpp
         src/layout/TreeLayoutEngine.cpp
+        src/layout/PlanarProjection.cpp
         src/layout/WorldLayoutEngine.cpp
         src/model/DirectoryPresentationPolicy.cpp
         src/model/FakeTreeData.cpp

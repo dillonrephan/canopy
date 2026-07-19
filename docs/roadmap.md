@@ -106,8 +106,8 @@ Work on `visual/perspective-sakura` is intentionally isolated from the planar
 corridor checkpoint.
 
 - [x] extract the current Sakura profile without changing behavior
-- [ ] separate stable world layout from screen projection
-- [ ] retain the planar renderer as a reference projection
+- [x] separate stable world layout from screen projection
+- [x] retain the planar renderer as a reference projection
 - [ ] add perspective camera and projected hit geometry
 - [ ] replace line branches with tapered trunk and corridor surfaces
 - [ ] render six foreground corridors and two distant fog hints

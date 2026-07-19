@@ -74,10 +74,13 @@ option is shared by incremental tree scans, Contents pages, and live refreshes.
 An explicitly entered hidden directory remains resolvable even while discovery
 of hidden entries is disabled.
 
-### Layout engine
+### World layout and projection
 
-A deterministic C++ layout engine converts a focused semantic tree into scene
-geometry. It must:
+A deterministic C++ world-layout engine converts a focused semantic tree into
+pixel-free placement. It assigns stable roles, sibling order, lanes, semantic
+depth, and distance along the parent path. A separate projection module combines
+that placement with explicit view state and produces screen geometry. Together
+they must:
 
 - preserve stable positions when state has not changed
 - keep enough parent context for backward navigation
@@ -88,11 +91,16 @@ geometry. It must:
 - expose bounds for hit testing
 - support interpolation between focus states
 
-Layout output is plain scene data. It does not draw and does not access the
-filesystem. Direct children occupy deterministic staggered corridor slots.
-Existing IDs retain their assigned slot while incremental results arrive, the
-eight front slots fill before any rear slot, and rear slots carry progressively
-lower depth opacity.
+World placement and projected output are plain data. Neither layer draws or
+accesses the filesystem. Direct children occupy deterministic staggered lanes.
+Existing IDs retain their assigned lane while incremental results arrive, the
+eight front lanes fill before any rear lane, and the current planar projector
+maps rear lanes to progressively lower depth opacity.
+
+`PlanarProjection` reproduces the established corridor renderer and intentionally
+ignores camera state beyond the renderer's existing canvas transform. It remains
+the behavioral reference while a perspective projector begins interpreting
+viewport, zoom, and travel depth.
 
 The layout applies a hard visual-child budget before generating geometry. See
 [Bounded Directory Presentation](bounded-directories.md) for the current
@@ -180,11 +188,11 @@ Avoid creating empty subsystem scaffolding before it has a concrete use.
 ## Data flow
 
 ```text
-filesystem watcher -> shared semantic model -> navigation -> layout -> renderer
-        |                     |                                     |
-incremental scanner ----------+-> paged contents -> QML inspector <-+
-                                                       |
-                                                 user interaction
+filesystem watcher -> semantic model -> world layout -> projection -> renderer
+        |                  |             ^               |
+incremental scanner -------+             | view state    |
+        |                                |               |
+        +-> paged contents -> QML inspector <---- navigation
 ```
 
 File operations will become a separate queued backend; they never pass through

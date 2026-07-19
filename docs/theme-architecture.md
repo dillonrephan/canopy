@@ -125,8 +125,10 @@ Each numbered stage should be a coherent, buildable commit:
 
 1. **Complete:** Extract current palette, metrics, motion, and presentation values into a
    statically registered Sakura profile without changing behavior.
-2. Introduce explicit camera/view state and stable world-layout output.
-3. Reproduce the current renderer through a planar projection module.
+2. **Complete:** Introduce explicit camera/view state and stable world-layout
+   output.
+3. **Complete:** Reproduce the current renderer through a planar projection
+   module.
 4. Add a perspective projection beside the planar reference.
 5. Add projected hit geometry and tests before switching interaction.
 6. Render tapered trunk and corridor surfaces.

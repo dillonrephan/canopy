@@ -875,8 +875,13 @@ void TreeSceneItem::applyTreeChange(const TreeChangeSet &change)
 
 void TreeSceneItem::relayout()
 {
+    const ViewState view {
+        .pan = m_pan,
+        .viewport = {width(), height()},
+        .zoom = m_zoom
+    };
     m_layout = m_layoutEngine.layout(
-        m_filesystemModel.nodes(), m_navigation.focusedId());
+        m_filesystemModel.nodes(), m_navigation.focusedId(), view);
     m_hovered = InvalidNodeId;
     update();
 }

@@ -20,6 +20,7 @@ private slots:
     void activeThemeProfileIsComplete();
     void worldPlacementMatchesPlanarLanes();
     void worldPlacementRemainsStableWhenChildIsAdded();
+    void planarProjectionPreservesGeometryAcrossViewState();
     void layoutIsDeterministic();
     void focusedDirectoryKeepsParentContext();
     void wideDirectoryUsesUniquePositions();
@@ -131,6 +132,39 @@ void TreeLayoutEngineTest::worldPlacementRemainsStableWhenChildIsAdded()
         QCOMPARE(placement.distanceAlongParent,
                  original.distanceAlongParent);
         QCOMPARE(placement.semanticDepth, original.semanticDepth);
+    }
+}
+
+void TreeLayoutEngineTest::planarProjectionPreservesGeometryAcrossViewState()
+{
+    const QVector<FileNode> nodes = FakeTreeData::create();
+    const WorldLayoutEngine worldEngine;
+    const PlanarProjection projection;
+    const WorldLayout world = worldEngine.layout(nodes, 1);
+    const QVector<ProjectedNode> defaultView =
+        projection.project(world, nodes, {});
+    const QVector<ProjectedNode> movedView = projection.project(
+        world,
+        nodes,
+        {
+            .pan = {-800.0, 420.0},
+            .viewport = {2560.0, 1440.0},
+            .zoom = 4.5,
+            .travelDepth = 12.0
+        });
+
+    QCOMPARE(defaultView.size(), movedView.size());
+    for (qsizetype i = 0; i < defaultView.size(); ++i) {
+        QCOMPARE(defaultView.at(i).id, movedView.at(i).id);
+        QCOMPARE(defaultView.at(i).position, movedView.at(i).position);
+        QCOMPARE(defaultView.at(i).branchStart,
+                 movedView.at(i).branchStart);
+        QCOMPARE(defaultView.at(i).branchControl1,
+                 movedView.at(i).branchControl1);
+        QCOMPARE(defaultView.at(i).branchControl2,
+                 movedView.at(i).branchControl2);
+        QCOMPARE(defaultView.at(i).labelBounds,
+                 movedView.at(i).labelBounds);
     }
 }
 
