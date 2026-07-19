@@ -26,17 +26,28 @@ It does not perform filesystem mutation or own critical operation logic.
 
 ### Semantic node model
 
-C++ model types represent entries independently of their appearance. Phase 1
-uses deterministic fake data. Later phases can populate the same semantic model
-from asynchronous directory scans.
+C++ model types represent entries independently of their appearance. The
+production model is populated from bounded asynchronous directory scans.
+Deterministic fake data remains available only to layout and stress tests.
 
 Initial node information should include a stable ID, parent ID, display name,
-semantic type, fake path, metadata, child IDs, and expanded/selected state.
+semantic type, absolute path, metadata, child IDs, and expanded/selected state.
 Botanical forms and colors do not belong in this model.
 
 Directory nodes also keep total entry count separate from materialized child
-IDs and report ready, loading, partial, inaccessible, or error state. Extreme
-counts never require an extreme in-memory child vector.
+IDs and report unloaded, ready, loading, partial, inaccessible, or error state.
+Extreme counts never require an extreme in-memory child vector.
+
+### Filesystem scanning
+
+The read-only scanner enumerates one requested directory on a worker thread. It
+counts visible entries while retaining at most 256 sorted entry records, checks
+for cancellation between entries, and never recursively follows the directory
+tree. A generation controller ensures that only the newest navigation request
+can update the model.
+
+Hidden entries are excluded at this checkpoint. Symbolic links are identified
+literally and are never followed automatically by the scanner.
 
 ### Layout engine
 
@@ -84,11 +95,10 @@ coordinates model, layout, and UI without absorbing their responsibilities.
 
 ### Theme data
 
-Phase 1 needs only a versioned set of tokens for palette, geometry, semantic
-forms, typography, and motion timing. The first theme is an illustrated field
-guide: restrained, readable, and botanical without decorative noise. C++ scene
-rendering and the QML shell consume the same token source so colors and geometry
-do not drift between layers.
+The application uses a versioned set of tokens for palette, geometry, semantic
+forms, typography, and motion timing. The first theme is Sakura Morning. C++
+scene rendering and the QML shell consume the same token source so colors and
+geometry do not drift between layers.
 
 The theme interface must not change navigation semantics or accessibility.
 
@@ -107,6 +117,7 @@ canopy/
 │   └── roadmap.md
 ├── src/
 │   ├── main.cpp
+│   ├── filesystem/
 │   ├── model/
 │   ├── layout/
 │   ├── rendering/
@@ -125,21 +136,21 @@ Avoid creating empty subsystem scaffolding before it has a concrete use.
 ## Data flow
 
 ```text
-fake model -> navigation state -> layout engine -> tree renderer
-                    |                                  |
-                    +-> QML shell/inspector <----------+
-                               |
-                         user interaction
+bounded scanner -> semantic model -> navigation state -> layout -> renderer
+                         |                                      |
+                         +----------> QML inspector <------------+
+                                         |
+                                   user interaction
 ```
 
-In later phases, an asynchronous scanner replaces the fake-data source. File
-operations become a separate queued backend; they never pass through the
-renderer.
+File operations will become a separate queued backend; they never pass through
+the scanner or renderer.
 
-## Phase 1 constraints
+## Read-only checkpoint constraints
 
-- No real filesystem scanning or mutation.
-- No dependency on KIO is required yet.
+- No filesystem mutation.
+- No recursive scan.
+- No dependency on KIO.
 - No one-QML-object-per-file recursive tree.
 - No randomized layout between runs or navigation states.
 - No theme-specific concepts in semantic model types.

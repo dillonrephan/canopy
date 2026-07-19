@@ -29,8 +29,6 @@ qt_add_qml_module(canopy
         src/filesystem/DirectoryScanController.h
         src/model/DirectoryPresentationPolicy.cpp
         src/model/DirectoryPresentationPolicy.h
-        src/model/FakeTreeData.cpp
-        src/model/FakeTreeData.h
         src/model/FileNode.h
         src/navigation/NavigationState.cpp
         src/navigation/NavigationState.h
@@ -79,13 +77,17 @@ if(BUILD_TESTING)
 
     qt_add_executable(canopy_directory_scanner_tests
         tests/unit/DirectoryScannerTest.cpp
+        src/filesystem/DirectoryScanController.cpp
         src/filesystem/DirectoryScanner.cpp
     )
     target_include_directories(canopy_directory_scanner_tests PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src/filesystem
         ${CMAKE_CURRENT_SOURCE_DIR}/src/model
     )
-    target_link_libraries(canopy_directory_scanner_tests PRIVATE Qt6::Test)
+    target_link_libraries(canopy_directory_scanner_tests PRIVATE
+        Qt6::Concurrent
+        Qt6::Test
+    )
     add_test(
         NAME canopy_directory_scanner_tests
         COMMAND canopy_directory_scanner_tests

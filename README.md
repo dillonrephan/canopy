@@ -21,23 +21,25 @@ management.
 
 ## Current status
 
-The project is in Phase 1: a fake-data interaction prototype. No real filesystem
-mutation will be implemented until the visual navigation model has proved useful.
-
-The first runnable milestone is deliberately narrow:
+The project has entered Phase 2 with a deliberately narrow read-only filesystem
+slice:
 
 - one desktop window
-- a fake home-directory tree with several levels
+- asynchronous, cancellable scanning of the real home directory
+- one-directory-at-a-time navigation with no recursive crawl
+- bounded materialization and a conventional Contents fallback
+- explicit loading, partial, inaccessible, and error states
+- extension-based MIME classification without reading file contents
 - deterministic botanical branch layout
 - pan and cursor-centered zoom
 - hover and selection
 - animated directory focus
 - breadcrumbs and parent context
 - a practical metadata inspector
-- one crowded fake directory to expose layout problems
+- deterministic fake fixtures retained for layout and stress tests
 
-Garden View, real filesystem scanning, thumbnails, file operations, packaging,
-and broad theme customization are outside this milestone.
+Hidden files, thumbnails, opening files, filesystem mutation, Garden View,
+packaging, and broad theme customization remain outside this checkpoint.
 
 ## Technology direction
 
@@ -101,9 +103,10 @@ toolbox run --container canopy-dev \
 
 ## Safety boundary
 
-Canopy is not yet connected to real user data. Later destructive features must
-default to trash, require explicit confirmation for permanent deletion, report
-partial failures honestly, and never silently overwrite files.
+Canopy reads real directory metadata but has no code path for changing files.
+Later destructive features must default to trash, require explicit confirmation
+for permanent deletion, report partial failures honestly, and never silently
+overwrite files.
 
 ## License
 

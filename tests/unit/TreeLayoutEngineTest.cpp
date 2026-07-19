@@ -282,7 +282,9 @@ void TreeLayoutEngineTest::presentationPolicyBoundsExtremeDirectory()
         DirectoryPresentationPolicy::evaluate(*largeDataset);
     QCOMPARE(largePresentation.visibleChildCount,
              DirectoryPresentationPolicy::VisualChildLimit);
-    QCOMPARE(largePresentation.hiddenChildCount, quint64(999'976));
+    QCOMPARE(
+        largePresentation.hiddenChildCount,
+        quint64(1'000'000 - DirectoryPresentationPolicy::VisualChildLimit));
     QVERIFY(largePresentation.usesContentsFallback);
 
     const FileNode &downloads = nodes.at(4);
@@ -327,7 +329,9 @@ void TreeLayoutEngineTest::layoutBoundsMaterializedExtremeChildren()
     const QVector<LayoutNode> layout = engine.layout(nodes, 1);
 
     QCOMPARE(layout.size(), DirectoryPresentationPolicy::VisualChildLimit + 1);
-    QCOMPARE(layout.first().hiddenChildCount, quint64(999'976));
+    QCOMPARE(
+        layout.first().hiddenChildCount,
+        quint64(1'000'000 - DirectoryPresentationPolicy::VisualChildLimit));
 }
 
 QTEST_GUILESS_MAIN(TreeLayoutEngineTest)

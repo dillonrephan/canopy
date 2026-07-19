@@ -1,3 +1,4 @@
+#include "DirectoryScanController.h"
 #include "DirectoryScanner.h"
 
 #include <QDir>
@@ -16,6 +17,7 @@ private slots:
     void boundsMaterializedEntriesWhileCountingAll();
     void reportsInvalidPathsLiterally();
     void supportsCancellation();
+    void controllerDeliversOnlyTheLatestRequest();
 };
 
 namespace {
@@ -111,6 +113,29 @@ void DirectoryScannerTest::supportsCancellation()
     QVERIFY(result.cancelled);
     QVERIFY(result.totalEntryCount < 8);
     QCOMPARE(result.status, QStringLiteral("Scan cancelled."));
+}
+
+void DirectoryScannerTest::controllerDeliversOnlyTheLatestRequest()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    createFile(temporaryDirectory.filePath(QStringLiteral("seed.txt")), "seed");
+
+    DirectoryScanController controller;
+    QVector<DirectoryScanResult> delivered;
+    connect(&controller, &DirectoryScanController::scanFinished,
+            this, [&delivered](quint64, const DirectoryScanResult &result) {
+                delivered.append(result);
+            });
+
+    controller.requestScan(
+        temporaryDirectory.filePath(QStringLiteral("already-gone")));
+    controller.requestScan(temporaryDirectory.path());
+
+    QTRY_COMPARE_WITH_TIMEOUT(delivered.size(), 1, 3000);
+    QCOMPARE(delivered.first().path, temporaryDirectory.path());
+    QCOMPARE(delivered.first().state, DirectoryLoadState::Ready);
+    QCOMPARE(delivered.first().totalEntryCount, quint64(1));
 }
 
 QTEST_GUILESS_MAIN(DirectoryScannerTest)

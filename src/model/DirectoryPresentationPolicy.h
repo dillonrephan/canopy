@@ -11,7 +11,7 @@ struct DirectoryPresentation {
 class DirectoryPresentationPolicy
 {
 public:
-    static constexpr qsizetype VisualChildLimit = 24;
+    static constexpr qsizetype VisualChildLimit = 16;
 
     [[nodiscard]] static DirectoryPresentation evaluate(const FileNode &directory);
 };
