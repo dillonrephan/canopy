@@ -267,7 +267,25 @@ void DirectoryScannerTest::filesystemModelObservesExternalDirectoryChanges()
     QTRY_COMPARE_WITH_TIMEOUT(
         model.node(model.rootId())->totalChildCount, quint64(1), 5000);
 
-    QVERIFY(QFile::remove(sproutPath));
+    const QString renamedPath =
+        temporaryDirectory.filePath(QStringLiteral("flower.txt"));
+    QVERIFY(QFile::rename(sproutPath, renamedPath));
+    QTRY_VERIFY_WITH_TIMEOUT(
+        std::ranges::any_of(
+            model.node(model.rootId())->children,
+            [&model, &renamedPath](NodeId childId) {
+                const FileNode *child = model.node(childId);
+                return child && child->path == renamedPath;
+            }),
+        5000);
+    QVERIFY(std::ranges::none_of(
+        model.node(model.rootId())->children,
+        [&model, &sproutPath](NodeId childId) {
+            const FileNode *child = model.node(childId);
+            return child && child->path == sproutPath;
+        }));
+
+    QVERIFY(QFile::remove(renamedPath));
     QTRY_COMPARE_WITH_TIMEOUT(
         model.node(model.rootId())->totalChildCount, quint64(0), 5000);
     QVERIFY(std::ranges::none_of(

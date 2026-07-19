@@ -26,9 +26,12 @@ It does not perform filesystem mutation or own critical operation logic.
 
 ### Semantic node model
 
-C++ model types represent entries independently of their appearance. The
-production model is populated from bounded asynchronous directory scans.
-Deterministic fake data remains available only to layout and stress tests.
+C++ model types represent entries independently of their appearance.
+`FilesystemTreeModel` owns the production node graph, scan generations, watched
+directories, and the paged Contents model. It is populated from bounded
+asynchronous scans and emits one observable change boundary for both the
+renderer and inspector. Deterministic fake data remains available only to layout
+and stress tests.
 
 Initial node information should include a stable ID, parent ID, display name,
 semantic type, absolute path, metadata, child IDs, and expanded/selected state.
@@ -37,6 +40,11 @@ Botanical forms and colors do not belong in this model.
 Directory nodes also keep total entry count separate from materialized child
 IDs and report unloaded, ready, loading, partial, inaccessible, or error state.
 Extreme counts never require an extreme in-memory child vector.
+
+The model watches the active tree directory and the directory currently shown
+in Contents. Watch notifications are debounced and trigger fresh cancellable
+scans; external create, rename, and delete operations therefore update both
+presentations without teaching the renderer filesystem semantics.
 
 ### Filesystem scanning
 
@@ -80,10 +88,9 @@ prototype contract and eventual incremental-list requirements.
 
 ### Tree renderer
 
-The tree scene should be a custom `QQuickItem`. The initial implementation may
-use a straightforward custom paint or scene-graph path, selected after a minimal
-Qt spike, but its public boundary should already accept layout output and theme
-tokens rather than filesystem objects.
+The tree scene is a custom painted `QQuickItem`. It reads semantic nodes from the
+shared model and reacts to its change signal, but does not own scanners,
+watchers, node mutation, or Contents paging.
 
 The renderer owns:
 
@@ -144,11 +151,11 @@ Avoid creating empty subsystem scaffolding before it has a concrete use.
 ## Data flow
 
 ```text
-incremental scanner -> semantic model -> navigation -> layout -> renderer
-        |                    |                                 |
-        +-> paged contents --+--------> QML inspector <--------+
-                                             |
-                                       user interaction
+filesystem watcher -> shared semantic model -> navigation -> layout -> renderer
+        |                     |                                     |
+incremental scanner ----------+-> paged contents -> QML inspector <-+
+                                                       |
+                                                 user interaction
 ```
 
 File operations will become a separate queued backend; they never pass through

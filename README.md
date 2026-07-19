@@ -26,6 +26,7 @@ slice:
 
 - one desktop window
 - asynchronous, cancellable scanning with incremental branch growth
+- live create, rename, and delete updates for active/inspected directories
 - one-directory-at-a-time navigation with no recursive crawl
 - 16-entry tree materialization and 64-entry paged Contents
 - explicit loading, partial, inaccessible, and error states
