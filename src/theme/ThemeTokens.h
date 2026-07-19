@@ -34,7 +34,7 @@ struct ThemeValues {
     qreal selectionHaloWidth = 6.0;
     qreal junctionRadius = 4.5;
     qreal hoveredJunctionRadius = 6.5;
-    int focusAnimationDuration = 190;
+    int focusAnimationDuration = 420;
 };
 
 class ThemeTokens final : public QObject

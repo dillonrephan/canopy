@@ -68,11 +68,13 @@ CorridorGeometry corridorGeometry(int slot)
         (depthBand == 0 ? 300.0 : 130.0) + lateralBand * 42.0;
     const qreal attachmentY =
         kFocusPosition.y() - 14.0 - pair * 15.0 - (side > 0 ? 6.0 : 0.0);
+    const qreal opacity = depthBand == 0
+        ? 1.0 : 0.68 - (pair - 4) * 0.12;
     return {
         .endpoint = {kFocusPosition.x() + side * distance, endpointY},
         .attachment = {kFocusPosition.x(), attachmentY},
         .depthLayer = depthBand + 1,
-        .opacity = depthBand == 0 ? 1.0 : 0.82
+        .opacity = opacity
     };
 }
 }

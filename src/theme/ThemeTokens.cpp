@@ -31,7 +31,7 @@ const ThemeValues &ThemeTokens::active()
         .selectionHaloWidth = 6.0,
         .junctionRadius = 4.5,
         .hoveredJunctionRadius = 6.5,
-        .focusAnimationDuration = 190
+        .focusAnimationDuration = 420
     };
     return sakuraMorning;
 }

@@ -22,6 +22,14 @@
 namespace {
 constexpr qreal kMinZoom = 0.48;
 constexpr qreal kMaxZoom = 2.4;
+
+QPainterPath staticBranchPath(const LayoutNode &layout)
+{
+    QPainterPath result(layout.branchStart);
+    result.cubicTo(layout.branchControl1, layout.branchControl2,
+                   layout.position);
+    return result;
+}
 }
 
 TreeSceneItem::TreeSceneItem(QQuickItem *parent)
@@ -43,6 +51,8 @@ TreeSceneItem::TreeSceneItem(QQuickItem *parent)
     connect(&m_focusAnimation, &QVariantAnimation::finished, this, [this] {
         m_transitionProgress = 1.0;
         m_previousPositions.clear();
+        m_enteringNodes.clear();
+        m_departingLayout.clear();
         update();
     });
     connect(&m_filesystemModel, &FilesystemTreeModel::treeChanged,
@@ -75,9 +85,42 @@ void TreeSceneItem::paint(QPainter *painter)
         const QPointF position = drawnPosition(layout);
         layout.labelBounds.translate(position - layout.position);
     }
-    const QSet<NodeId> visibleLabels = LabelVisibilityPolicy::visibleLabels(
+    QSet<NodeId> visibleLabels = LabelVisibilityPolicy::visibleLabels(
         labelLayout, m_navigation.focusedId(), m_navigation.selectedId(),
         m_hovered, m_zoom);
+    for (const LayoutNode &layout : std::as_const(m_layout)) {
+        if (layout.depthOpacity < 0.55
+            && layout.id != m_navigation.selectedId()
+            && layout.id != m_hovered) {
+            visibleLabels.remove(layout.id);
+        }
+    }
+
+    if (m_transitionProgress < 1.0 && !m_departingLayout.isEmpty()) {
+        painter->save();
+        painter->setOpacity(1.0 - m_transitionProgress);
+        for (const LayoutNode &layout : std::as_const(m_departingLayout)) {
+            const FileNode *entry = node(layout.id);
+            if (!entry)
+                continue;
+            QColor branchColor = theme.wood;
+            branchColor.setAlphaF(
+                branchColor.alphaF() * layout.depthOpacity);
+            const qreal depthScale = 1.0 - layout.depthLayer * 0.07;
+            const qreal branchWidth = (entry->isDirectory()
+                ? theme.directoryBranchWidth : theme.fileStemWidth)
+                * depthScale;
+            painter->setPen(QPen(branchColor, branchWidth,
+                                 Qt::SolidLine, Qt::RoundCap));
+            painter->drawPath(staticBranchPath(layout));
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(branchColor);
+            painter->drawEllipse(layout.position,
+                                 theme.junctionRadius,
+                                 theme.junctionRadius);
+        }
+        painter->restore();
+    }
 
     if (const LayoutNode *focusedLayout =
             layoutNode(m_navigation.focusedId());
@@ -94,6 +137,8 @@ void TreeSceneItem::paint(QPainter *painter)
         if (!entry)
             continue;
 
+        const qreal arrivalOpacity = m_enteringNodes.contains(layout.id)
+            ? m_transitionProgress : 1.0;
         const bool directory = entry->isDirectory();
         const bool selected = layout.id == m_navigation.selectedId();
         const bool hovered = layout.id == m_hovered;
@@ -106,7 +151,7 @@ void TreeSceneItem::paint(QPainter *painter)
             branchColor.setAlphaF(0.48);
         else
             branchColor.setAlphaF(
-                branchColor.alphaF() * layout.depthOpacity);
+                branchColor.alphaF() * layout.depthOpacity * arrivalOpacity);
 
         const qreal depthScale = 1.0 - layout.depthLayer * 0.07;
         const qreal branchWidth = (directory
@@ -138,7 +183,9 @@ void TreeSceneItem::paint(QPainter *painter)
 
         painter->save();
         painter->setOpacity(
-            layout.parentContext ? 0.48 : layout.depthOpacity);
+            (layout.parentContext ? 0.48 : layout.depthOpacity)
+            * (m_enteringNodes.contains(layout.id)
+                   ? m_transitionProgress : 1.0));
         if (entry->kind == NodeKind::Directory) {
             painter->setPen(QPen(selected ? theme.selection : theme.woodShadow,
                                  selected ? 2.5 : 1.5));
@@ -192,6 +239,29 @@ void TreeSceneItem::paint(QPainter *painter)
             painter->drawText(labelBounds,
                               Qt::AlignHCenter | Qt::AlignTop | Qt::TextWordWrap, label);
         }
+        painter->restore();
+    }
+
+    if (const LayoutNode *focusedLayout =
+            layoutNode(m_navigation.focusedId());
+        focusedLayout && focusedLayout->hiddenChildCount > 0) {
+        painter->save();
+        painter->setPen(theme.textDark);
+        QFont countFont = painter->font();
+        countFont.setPixelSize(12);
+        countFont.setWeight(QFont::DemiBold);
+        painter->setFont(countFont);
+        const QString countText = QStringLiteral("+%1 more in Contents")
+            .arg(focusedLayout->hiddenChildCount);
+        const QRectF countBounds(
+            focusedLayout->position.x() + 28.0,
+            focusedLayout->position.y() + 64.0,
+            164.0, 28.0);
+        painter->setPen(QPen(theme.border, 1.0));
+        painter->setBrush(theme.raisedSurface);
+        painter->drawRoundedRect(countBounds, 8.0, 8.0);
+        painter->setPen(theme.textDark);
+        painter->drawText(countBounds, Qt::AlignCenter, countText);
         painter->restore();
     }
 
@@ -293,6 +363,8 @@ void TreeSceneItem::setReducedMotion(bool reducedMotion)
         m_focusAnimation.stop();
     m_transitionProgress = 1.0;
     m_previousPositions.clear();
+    m_enteringNodes.clear();
+    m_departingLayout.clear();
     update();
     emit reducedMotionChanged();
 }
@@ -456,8 +528,11 @@ NodeId TreeSceneItem::nodeAt(const QPointF &viewPosition) const
     const QPointF scenePosition = toScene(viewPosition);
     for (auto it = m_layout.crbegin(); it != m_layout.crend(); ++it) {
         const FileNode *entry = node(it->id);
-        if (!entry)
+        if (!entry || (m_enteringNodes.contains(it->id)
+                       && m_transitionProgress < 0.35)
+            || it->depthOpacity < 0.28) {
             continue;
+        }
 
         if (entry->isDirectory()) {
             QPainterPathStroker hitStroker;
@@ -584,16 +659,36 @@ void TreeSceneItem::focusNode(NodeId id, bool addToHistory)
     }
 
     m_focusAnimation.stop();
+    m_departingLayout.clear();
+    m_enteringNodes.clear();
     m_previousPositions.clear();
     for (const LayoutNode &layout : m_layout)
         m_previousPositions.insert(layout.id, drawnPosition(layout));
+    const QVector<LayoutNode> previousLayout = m_layout;
     m_navigation.focus(id, addToHistory);
     relayout();
+
+    QSet<NodeId> currentIds;
+    currentIds.reserve(m_layout.size());
+    for (const LayoutNode &layout : std::as_const(m_layout))
+        currentIds.insert(layout.id);
+    for (const LayoutNode &layout : previousLayout) {
+        if (!currentIds.contains(layout.id))
+            m_departingLayout.append(layout);
+    }
+    for (const LayoutNode &layout : std::as_const(m_layout)) {
+        if (m_previousPositions.contains(layout.id))
+            continue;
+        m_previousPositions.insert(layout.id, layout.branchStart);
+        m_enteringNodes.insert(layout.id);
+    }
     resetView();
 
     if (m_reducedMotion) {
         m_transitionProgress = 1.0;
         m_previousPositions.clear();
+        m_enteringNodes.clear();
+        m_departingLayout.clear();
     } else {
         m_transitionProgress = 0.0;
         m_focusAnimation.start();

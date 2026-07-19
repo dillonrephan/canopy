@@ -27,6 +27,7 @@ private slots:
     void layoutProvidesConnectedBranchGeometry();
     void directChildrenUseStaggeredCorridors();
     void corridorsRemainStableWhenChildIsAdded();
+    void busyDirectoriesFadeRearCorridors();
     void fixtureTracksDirectoryCountsAndStates();
     void presentationPolicyBoundsExtremeDirectory();
     void layoutBoundsMaterializedExtremeChildren();
@@ -315,6 +316,28 @@ void TreeLayoutEngineTest::corridorsRemainStableWhenChildIsAdded()
         QCOMPARE(node.branchStart, original.branchStart);
         QCOMPARE(node.corridorSlot, original.corridorSlot);
     }
+}
+
+void TreeLayoutEngineTest::busyDirectoriesFadeRearCorridors()
+{
+    const QVector<FileNode> nodes = FakeTreeData::create();
+    const TreeLayoutEngine engine;
+    const NodeId downloadsId = 5;
+    const QVector<LayoutNode> layout = engine.layout(nodes, downloadsId);
+    qsizetype primaryCorridors = 0;
+    qsizetype fadedCorridors = 0;
+
+    for (const LayoutNode &node : layout) {
+        if (node.parentId != downloadsId)
+            continue;
+        if (node.depthOpacity >= 0.99)
+            ++primaryCorridors;
+        if (node.depthOpacity < 0.55)
+            ++fadedCorridors;
+    }
+
+    QCOMPARE(primaryCorridors, qsizetype(8));
+    QVERIFY(fadedCorridors >= 2);
 }
 
 void TreeLayoutEngineTest::fixtureTracksDirectoryCountsAndStates()

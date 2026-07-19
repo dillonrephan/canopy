@@ -7,6 +7,7 @@
 #include <QHash>
 #include <QPointF>
 #include <QQuickPaintedItem>
+#include <QSet>
 #include <QVariantAnimation>
 #include <QVector>
 #include <QtQmlIntegration/qqmlintegration.h>
@@ -113,9 +114,11 @@ private:
 
     FilesystemTreeModel m_filesystemModel;
     QVector<LayoutNode> m_layout;
+    QVector<LayoutNode> m_departingLayout;
     TreeLayoutEngine m_layoutEngine;
     NavigationState m_navigation {1};
     QHash<NodeId, QPointF> m_previousPositions;
+    QSet<NodeId> m_enteringNodes;
     QVariantAnimation m_focusAnimation;
     QPointF m_pan {120.0, 35.0};
     QPointF m_lastPointer;
