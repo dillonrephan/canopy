@@ -34,7 +34,9 @@ slice:
 - 16-entry tree materialization and 64-entry paged Contents
 - explicit loading, partial, inaccessible, and error states
 - extension-based MIME classification without reading file contents
-- deterministic botanical branch layout
+- deterministic 2.5D branch corridors with stable incremental placement
+- depth-faded busy-directory growth with an explicit Contents handoff
+- grow/fade transitions for live filesystem changes and directory focus
 - pan and cursor-centered zoom
 - hover and selection
 - animated directory focus

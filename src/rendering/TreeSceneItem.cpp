@@ -55,9 +55,28 @@ TreeSceneItem::TreeSceneItem(QQuickItem *parent)
         m_departingLayout.clear();
         update();
     });
+    m_liveChangeAnimation.setDuration(260);
+    m_liveChangeAnimation.setStartValue(0.0);
+    m_liveChangeAnimation.setEndValue(1.0);
+    m_liveChangeAnimation.setEasingCurve(QEasingCurve::OutCubic);
+    connect(&m_liveChangeAnimation, &QVariantAnimation::valueChanged, this,
+            [this](const QVariant &value) {
+                m_liveChangeProgress = value.toReal();
+                update();
+            });
+    connect(&m_liveChangeAnimation, &QVariantAnimation::finished, this, [this] {
+        m_liveChangeProgress = 1.0;
+        m_livePreviousPositions.clear();
+        m_liveEnteringNodes.clear();
+        m_liveDepartingLayout.clear();
+        update();
+    });
     connect(&m_filesystemModel, &FilesystemTreeModel::treeChanged,
-            this, [this](const TreeChangeSet &) {
-                relayout();
+            this, [this](const TreeChangeSet &change) {
+                if (!change.added.isEmpty() || !change.removed.isEmpty())
+                    applyTreeChange(change);
+                else
+                    relayout();
                 emit selectionChanged();
             });
     connect(this, &TreeSceneItem::selectionChanged, this, [this] {
@@ -96,10 +115,14 @@ void TreeSceneItem::paint(QPainter *painter)
         }
     }
 
-    if (m_transitionProgress < 1.0 && !m_departingLayout.isEmpty()) {
+    const auto paintDeparting =
+        [this, painter, &theme](
+            const QVector<LayoutNode> &layouts, qreal opacity) {
+        if (opacity <= 0.0 || layouts.isEmpty())
+            return;
         painter->save();
-        painter->setOpacity(1.0 - m_transitionProgress);
-        for (const LayoutNode &layout : std::as_const(m_departingLayout)) {
+        painter->setOpacity(opacity);
+        for (const LayoutNode &layout : layouts) {
             const FileNode *entry = node(layout.id);
             if (!entry)
                 continue;
@@ -120,7 +143,9 @@ void TreeSceneItem::paint(QPainter *painter)
                                  theme.junctionRadius);
         }
         painter->restore();
-    }
+    };
+    paintDeparting(m_departingLayout, 1.0 - m_transitionProgress);
+    paintDeparting(m_liveDepartingLayout, 1.0 - m_liveChangeProgress);
 
     if (const LayoutNode *focusedLayout =
             layoutNode(m_navigation.focusedId());
@@ -137,8 +162,13 @@ void TreeSceneItem::paint(QPainter *painter)
         if (!entry)
             continue;
 
-        const qreal arrivalOpacity = m_enteringNodes.contains(layout.id)
+        const qreal focusArrivalOpacity = m_enteringNodes.contains(layout.id)
             ? m_transitionProgress : 1.0;
+        const qreal liveArrivalOpacity =
+            m_liveEnteringNodes.contains(layout.id)
+            ? m_liveChangeProgress : 1.0;
+        const qreal arrivalOpacity =
+            focusArrivalOpacity * liveArrivalOpacity;
         const bool directory = entry->isDirectory();
         const bool selected = layout.id == m_navigation.selectedId();
         const bool hovered = layout.id == m_hovered;
@@ -176,6 +206,13 @@ void TreeSceneItem::paint(QPainter *painter)
         const FileNode *entry = node(layout.id);
         if (!entry)
             continue;
+        const qreal focusArrivalOpacity = m_enteringNodes.contains(layout.id)
+            ? m_transitionProgress : 1.0;
+        const qreal liveArrivalOpacity =
+            m_liveEnteringNodes.contains(layout.id)
+            ? m_liveChangeProgress : 1.0;
+        const qreal arrivalOpacity =
+            focusArrivalOpacity * liveArrivalOpacity;
         const QPointF position = drawnPosition(layout);
         const bool selected = layout.id == m_navigation.selectedId();
         const bool hovered = layout.id == m_hovered;
@@ -184,8 +221,7 @@ void TreeSceneItem::paint(QPainter *painter)
         painter->save();
         painter->setOpacity(
             (layout.parentContext ? 0.48 : layout.depthOpacity)
-            * (m_enteringNodes.contains(layout.id)
-                   ? m_transitionProgress : 1.0));
+            * arrivalOpacity);
         if (entry->kind == NodeKind::Directory) {
             painter->setPen(QPen(selected ? theme.selection : theme.woodShadow,
                                  selected ? 2.5 : 1.5));
@@ -361,10 +397,18 @@ void TreeSceneItem::setReducedMotion(bool reducedMotion)
     m_reducedMotion = reducedMotion;
     if (reducedMotion && m_focusAnimation.state() == QAbstractAnimation::Running)
         m_focusAnimation.stop();
+    if (reducedMotion
+        && m_liveChangeAnimation.state() == QAbstractAnimation::Running) {
+        m_liveChangeAnimation.stop();
+    }
     m_transitionProgress = 1.0;
+    m_liveChangeProgress = 1.0;
     m_previousPositions.clear();
+    m_livePreviousPositions.clear();
     m_enteringNodes.clear();
+    m_liveEnteringNodes.clear();
     m_departingLayout.clear();
+    m_liveDepartingLayout.clear();
     update();
     emit reducedMotionChanged();
 }
@@ -528,8 +572,11 @@ NodeId TreeSceneItem::nodeAt(const QPointF &viewPosition) const
     const QPointF scenePosition = toScene(viewPosition);
     for (auto it = m_layout.crbegin(); it != m_layout.crend(); ++it) {
         const FileNode *entry = node(it->id);
-        if (!entry || (m_enteringNodes.contains(it->id)
-                       && m_transitionProgress < 0.35)
+        if (!entry
+            || (m_enteringNodes.contains(it->id)
+                && m_transitionProgress < 0.35)
+            || (m_liveEnteringNodes.contains(it->id)
+                && m_liveChangeProgress < 0.35)
             || it->depthOpacity < 0.28) {
             continue;
         }
@@ -573,9 +620,19 @@ const LayoutNode *TreeSceneItem::layoutNode(NodeId id) const
 QPointF TreeSceneItem::drawnPosition(const LayoutNode &layout) const
 {
     const auto previous = m_previousPositions.constFind(layout.id);
-    if (previous == m_previousPositions.cend() || m_transitionProgress >= 1.0)
-        return layout.position;
-    return *previous + (layout.position - *previous) * m_transitionProgress;
+    QPointF position = layout.position;
+    if (previous != m_previousPositions.cend()
+        && m_transitionProgress < 1.0) {
+        position = *previous
+            + (layout.position - *previous) * m_transitionProgress;
+    }
+    const auto livePrevious = m_livePreviousPositions.constFind(layout.id);
+    if (livePrevious != m_livePreviousPositions.cend()
+        && m_liveChangeProgress < 1.0) {
+        position = *livePrevious
+            + (position - *livePrevious) * m_liveChangeProgress;
+    }
+    return position;
 }
 
 QPainterPath TreeSceneItem::drawnBranchPath(const LayoutNode &layout) const
@@ -713,6 +770,45 @@ void TreeSceneItem::setPathMessage(const QString &message)
         return;
     m_pathMessage = message;
     emit pathMessageChanged();
+}
+
+void TreeSceneItem::applyTreeChange(const TreeChangeSet &change)
+{
+    m_liveChangeAnimation.stop();
+    m_liveChangeProgress = 1.0;
+    m_livePreviousPositions.clear();
+    m_liveEnteringNodes.clear();
+    m_liveDepartingLayout.clear();
+
+    const QVector<LayoutNode> previousLayout = m_layout;
+    relayout();
+
+    const QSet<NodeId> removed(
+        change.removed.cbegin(), change.removed.cend());
+    for (const LayoutNode &layout : previousLayout) {
+        if (removed.contains(layout.id))
+            m_liveDepartingLayout.append(layout);
+    }
+
+    const QSet<NodeId> added(change.added.cbegin(), change.added.cend());
+    for (const LayoutNode &layout : std::as_const(m_layout)) {
+        if (!added.contains(layout.id))
+            continue;
+        m_liveEnteringNodes.insert(layout.id);
+        m_livePreviousPositions.insert(layout.id, layout.branchStart);
+    }
+
+    if (m_reducedMotion
+        || (m_liveEnteringNodes.isEmpty()
+            && m_liveDepartingLayout.isEmpty())) {
+        m_liveDepartingLayout.clear();
+        m_livePreviousPositions.clear();
+        m_liveEnteringNodes.clear();
+        return;
+    }
+
+    m_liveChangeProgress = 0.0;
+    m_liveChangeAnimation.start();
 }
 
 void TreeSceneItem::relayout()

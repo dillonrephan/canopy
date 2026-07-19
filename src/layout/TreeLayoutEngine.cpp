@@ -205,10 +205,16 @@ QVector<int> TreeLayoutEngine::corridorSlots(
         if (existing >= 0 && usedSlots.contains(existing))
             continue;
 
+        constexpr int primaryCorridorCount =
+            static_cast<int>(kCorridorCount / 2);
         const int preferred = static_cast<int>(
-            qHash(child->path) % static_cast<size_t>(kCorridorCount));
+            qHash(child->path)
+            % static_cast<size_t>(primaryCorridorCount));
         for (int distance = 0; distance < kCorridorCount; ++distance) {
-            const int candidate = (preferred + distance) % kCorridorCount;
+            const int layer = distance / primaryCorridorCount;
+            const int offset = distance % primaryCorridorCount;
+            const int candidate = layer * primaryCorridorCount
+                + (preferred + offset) % primaryCorridorCount;
             if (usedSlots.contains(candidate))
                 continue;
             m_corridorSlots.insert(child->id, candidate);

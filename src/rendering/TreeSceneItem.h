@@ -110,21 +110,27 @@ private:
     void focusNode(NodeId id, bool addToHistory);
     void openFile(const QString &path);
     void setPathMessage(const QString &message);
+    void applyTreeChange(const TreeChangeSet &change);
     void relayout();
 
     FilesystemTreeModel m_filesystemModel;
     QVector<LayoutNode> m_layout;
     QVector<LayoutNode> m_departingLayout;
+    QVector<LayoutNode> m_liveDepartingLayout;
     TreeLayoutEngine m_layoutEngine;
     NavigationState m_navigation {1};
     QHash<NodeId, QPointF> m_previousPositions;
+    QHash<NodeId, QPointF> m_livePreviousPositions;
     QSet<NodeId> m_enteringNodes;
+    QSet<NodeId> m_liveEnteringNodes;
     QVariantAnimation m_focusAnimation;
+    QVariantAnimation m_liveChangeAnimation;
     QPointF m_pan {120.0, 35.0};
     QPointF m_lastPointer;
     QString m_pathMessage;
     qreal m_zoom = 1.0;
     qreal m_transitionProgress = 1.0;
+    qreal m_liveChangeProgress = 1.0;
     NodeId m_hovered = InvalidNodeId;
     bool m_panning = false;
     bool m_reducedMotion = false;

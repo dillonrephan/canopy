@@ -10,7 +10,11 @@ as an individual botanical form.
   child IDs.
 - Directory state is explicit: ready, loading, partial, inaccessible, or error.
 - Tree layout considers at most 16 direct children of the focused directory.
+- The first eight children occupy full-opacity front corridors. Additional
+  materialized children use progressively faded rear corridors, and faint rear
+  labels are suppressed unless selected or hovered.
 - The layout reports how many children remain outside the visual presentation.
+- The scene renders that remainder as a trunk-side “more in Contents” handoff.
 - Directories that are incomplete or exceed the visual budget request the
   conventional Contents fallback.
 - Production tree scans count visible entries while retaining at most 16
@@ -20,10 +24,12 @@ as an individual botanical form.
 - The fake Large Dataset test fixture reports 1,000,000 entries while
   materializing only 16 samples.
 
-The value 16 is an initial interaction budget, reduced after the first real-home
-scan showed that 24 simultaneous branches overwhelmed the scene. It is not a
-filesystem limit. It should change only after visual testing, and increasing it
-must not remove the hard bound.
+The value 16 is an initial materialization budget, reduced after the first
+real-home scan showed that 24 simultaneous branches overwhelmed the scene. The
+front-corridor budget is 8; the remaining materialized entries provide spatial
+context without equal visual weight. Neither value is a filesystem limit. They
+should change only after visual testing, and increasing them must not remove the
+hard bound.
 
 ## Contents fallback
 

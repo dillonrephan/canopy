@@ -30,7 +30,9 @@ C++ model types represent entries independently of their appearance.
 `FilesystemTreeModel` owns the production node graph, scan generations, watched
 directories, and the paged Contents model. It is populated from bounded
 asynchronous scans and emits one observable change boundary for both the
-renderer and inspector. Deterministic fake data remains available only to layout
+renderer and inspector. Tree changes identify their reason and the added and
+removed node IDs so presentation layers can animate the delta without inferring
+filesystem semantics. Deterministic fake data remains available only to layout
 and stress tests.
 
 Initial node information should include a stable ID, parent ID, display name,
@@ -83,7 +85,10 @@ geometry. It must:
 - support interpolation between focus states
 
 Layout output is plain scene data. It does not draw and does not access the
-filesystem.
+filesystem. Direct children occupy deterministic staggered corridor slots.
+Existing IDs retain their assigned slot while incremental results arrive, the
+eight front slots fill before any rear slot, and rear slots carry progressively
+lower depth opacity.
 
 The layout applies a hard visual-child budget before generating geometry. See
 [Bounded Directory Presentation](bounded-directories.md) for the current
@@ -102,6 +107,13 @@ The renderer owns:
 - viewport culling
 - whole-branch hover and selection hit testing
 - scene-to-view coordinate conversion
+- short-lived arrival and departure snapshots for typed model deltas
+
+Focus changes advance the selected corridor while obsolete siblings recede and
+newly revealed children grow from their attachment points. Live create, rename,
+and delete changes use the same grow/fade vocabulary. Completed fades are
+discarded and cannot participate in hit testing; reduced-motion mode skips all
+transient geometry.
 
 QML overlays remain appropriate for conventional controls and the inspector.
 

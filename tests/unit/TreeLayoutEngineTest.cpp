@@ -276,6 +276,7 @@ void TreeLayoutEngineTest::directChildrenUseStaggeredCorridors()
         QVERIFY(!node.followsParentPosition);
         QVERIFY(node.corridorSlot >= 0);
         QVERIFY(node.depthLayer >= 1);
+        QCOMPARE(node.depthOpacity, qreal(1.0));
         corridorSlots.insert(node.corridorSlot);
         attachmentHeights.insert(node.branchStart.y());
     }
