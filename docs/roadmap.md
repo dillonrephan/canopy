@@ -100,6 +100,22 @@ No destructive operations.
 - crash recovery and persistent navigation state
 - comprehensive keyboard and accessibility audit
 
+## Active visual experiment — Sakura Perspective
+
+Work on `visual/perspective-sakura` is intentionally isolated from the planar
+corridor checkpoint.
+
+- [ ] extract the current Sakura profile without changing behavior
+- [ ] separate stable world layout from screen projection
+- [ ] retain the planar renderer as a reference projection
+- [ ] add perspective camera and projected hit geometry
+- [ ] replace line branches with tapered trunk and corridor surfaces
+- [ ] render six foreground corridors and two distant fog hints
+- [ ] validate camera travel, live changes, backtracking, and reduced motion
+
+The detailed boundaries and commit sequence live in
+[Theme and Projection Architecture](theme-architecture.md).
+
 ## Phase 5 — Desktop integration and packaging
 
 - application identity and icon

@@ -9,6 +9,10 @@ file semantics and operation safety must not.
 The architecture should also let the Phase 1 prototype remain small without
 creating a renderer or data model that must immediately be discarded.
 
+The perspective-theme extraction and the boundary between stable world layout
+and viewpoint projection are specified in
+[Theme and Projection Architecture](theme-architecture.md).
+
 ## Initial subsystem boundaries
 
 ### Application shell
