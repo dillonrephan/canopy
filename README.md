@@ -37,6 +37,7 @@ slice:
 - deterministic 2.5D branch corridors with stable incremental placement
 - depth-faded busy-directory growth with an explicit Contents handoff
 - grow/fade transitions for live filesystem changes and directory focus
+- zoom-cleared depth fog and animated blank-space travel
 - pan and cursor-centered zoom
 - hover and selection
 - animated directory focus

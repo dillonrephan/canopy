@@ -13,6 +13,8 @@ as an individual botanical form.
 - The first eight children occupy full-opacity front corridors. Additional
   materialized children use progressively faded rear corridors, and faint rear
   labels are suppressed unless selected or hovered.
+- Zoom progressively clears rear-corridor fading and makes eligible labels
+  available again; faded growth is never a navigation dead end.
 - The layout reports how many children remain outside the visual presentation.
 - The scene renders that remainder as a trunk-side “more in Contents” handoff.
 - Directories that are incomplete or exceed the visual budget request the

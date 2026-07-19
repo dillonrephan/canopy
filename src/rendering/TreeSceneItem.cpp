@@ -21,7 +21,8 @@
 
 namespace {
 constexpr qreal kMinZoom = 0.48;
-constexpr qreal kMaxZoom = 2.4;
+constexpr qreal kMaxZoom = 5.0;
+constexpr qreal kBlankDoubleClickZoom = 1.7;
 
 QPainterPath staticBranchPath(const LayoutNode &layout)
 {
@@ -71,6 +72,20 @@ TreeSceneItem::TreeSceneItem(QQuickItem *parent)
         m_liveDepartingLayout.clear();
         update();
     });
+    m_cameraAnimation.setDuration(280);
+    m_cameraAnimation.setStartValue(0.0);
+    m_cameraAnimation.setEndValue(1.0);
+    m_cameraAnimation.setEasingCurve(QEasingCurve::OutCubic);
+    connect(&m_cameraAnimation, &QVariantAnimation::valueChanged, this,
+            [this](const QVariant &value) {
+                const qreal progress = value.toReal();
+                m_pan = m_cameraStartPan
+                    + (m_cameraTargetPan - m_cameraStartPan) * progress;
+                m_zoom = m_cameraStartZoom
+                    + (m_cameraTargetZoom - m_cameraStartZoom) * progress;
+                update();
+                emit cameraChanged();
+            });
     connect(&m_filesystemModel, &FilesystemTreeModel::treeChanged,
             this, [this](const TreeChangeSet &change) {
                 if (!change.added.isEmpty() || !change.removed.isEmpty())
@@ -108,7 +123,8 @@ void TreeSceneItem::paint(QPainter *painter)
         labelLayout, m_navigation.focusedId(), m_navigation.selectedId(),
         m_hovered, m_zoom);
     for (const LayoutNode &layout : std::as_const(m_layout)) {
-        if (layout.depthOpacity < 0.55
+        if (LabelVisibilityPolicy::depthOpacity(
+                layout.depthOpacity, m_zoom) < 0.55
             && layout.id != m_navigation.selectedId()
             && layout.id != m_hovered) {
             visibleLabels.remove(layout.id);
@@ -169,6 +185,8 @@ void TreeSceneItem::paint(QPainter *painter)
             ? m_liveChangeProgress : 1.0;
         const qreal arrivalOpacity =
             focusArrivalOpacity * liveArrivalOpacity;
+        const qreal depthOpacity = LabelVisibilityPolicy::depthOpacity(
+            layout.depthOpacity, m_zoom);
         const bool directory = entry->isDirectory();
         const bool selected = layout.id == m_navigation.selectedId();
         const bool hovered = layout.id == m_hovered;
@@ -181,7 +199,7 @@ void TreeSceneItem::paint(QPainter *painter)
             branchColor.setAlphaF(0.48);
         else
             branchColor.setAlphaF(
-                branchColor.alphaF() * layout.depthOpacity * arrivalOpacity);
+                branchColor.alphaF() * depthOpacity * arrivalOpacity);
 
         const qreal depthScale = 1.0 - layout.depthLayer * 0.07;
         const qreal branchWidth = (directory
@@ -213,6 +231,8 @@ void TreeSceneItem::paint(QPainter *painter)
             ? m_liveChangeProgress : 1.0;
         const qreal arrivalOpacity =
             focusArrivalOpacity * liveArrivalOpacity;
+        const qreal depthOpacity = LabelVisibilityPolicy::depthOpacity(
+            layout.depthOpacity, m_zoom);
         const QPointF position = drawnPosition(layout);
         const bool selected = layout.id == m_navigation.selectedId();
         const bool hovered = layout.id == m_hovered;
@@ -220,7 +240,7 @@ void TreeSceneItem::paint(QPainter *painter)
 
         painter->save();
         painter->setOpacity(
-            (layout.parentContext ? 0.48 : layout.depthOpacity)
+            (layout.parentContext ? 0.48 : depthOpacity)
             * arrivalOpacity);
         if (entry->kind == NodeKind::Directory) {
             painter->setPen(QPen(selected ? theme.selection : theme.woodShadow,
@@ -401,6 +421,12 @@ void TreeSceneItem::setReducedMotion(bool reducedMotion)
         && m_liveChangeAnimation.state() == QAbstractAnimation::Running) {
         m_liveChangeAnimation.stop();
     }
+    if (reducedMotion
+        && m_cameraAnimation.state() == QAbstractAnimation::Running) {
+        m_cameraAnimation.stop();
+        m_pan = m_cameraTargetPan;
+        m_zoom = m_cameraTargetZoom;
+    }
     m_transitionProgress = 1.0;
     m_liveChangeProgress = 1.0;
     m_previousPositions.clear();
@@ -423,6 +449,7 @@ void TreeSceneItem::setShowHidden(bool showHidden)
 
 void TreeSceneItem::resetView()
 {
+    m_cameraAnimation.stop();
     m_pan = QPointF(120.0, 35.0);
     m_zoom = 1.0;
     update();
@@ -507,6 +534,7 @@ void TreeSceneItem::hoverLeaveEvent(QHoverEvent *)
 
 void TreeSceneItem::mousePressEvent(QMouseEvent *event)
 {
+    m_cameraAnimation.stop();
     m_lastPointer = event->position();
     const NodeId hit = nodeAt(event->position());
     if (event->button() == Qt::MiddleButton || hit == InvalidNodeId) {
@@ -528,6 +556,10 @@ void TreeSceneItem::mouseDoubleClickEvent(QMouseEvent *event)
             focusNode(hit, true);
         else if (entry)
             openFile(entry->path);
+    } else {
+        m_panning = false;
+        unsetCursor();
+        zoomAt(event->position(), kBlankDoubleClickZoom, true);
     }
     event->accept();
 }
@@ -553,18 +585,37 @@ void TreeSceneItem::mouseReleaseEvent(QMouseEvent *event)
 
 void TreeSceneItem::wheelEvent(QWheelEvent *event)
 {
-    const QPointF anchor = toScene(event->position());
     const qreal factor = qPow(1.0015, event->angleDelta().y());
-    m_zoom = qBound(kMinZoom, m_zoom * factor, kMaxZoom);
-    m_pan = event->position() - anchor * m_zoom;
-    update();
-    emit cameraChanged();
+    zoomAt(event->position(), factor, false);
     event->accept();
 }
 
 QPointF TreeSceneItem::toScene(const QPointF &viewPosition) const
 {
     return (viewPosition - m_pan) / m_zoom;
+}
+
+void TreeSceneItem::zoomAt(
+    const QPointF &viewPosition, qreal factor, bool recenter)
+{
+    m_cameraAnimation.stop();
+    const QPointF anchor = toScene(viewPosition);
+    const qreal nextZoom = qBound(kMinZoom, m_zoom * factor, kMaxZoom);
+    const QPointF destination = recenter
+        ? boundingRect().center() : viewPosition;
+    const QPointF nextPan = destination - anchor * nextZoom;
+    if (recenter && !m_reducedMotion) {
+        m_cameraStartPan = m_pan;
+        m_cameraTargetPan = nextPan;
+        m_cameraStartZoom = m_zoom;
+        m_cameraTargetZoom = nextZoom;
+        m_cameraAnimation.start();
+        return;
+    }
+    m_zoom = nextZoom;
+    m_pan = nextPan;
+    update();
+    emit cameraChanged();
 }
 
 NodeId TreeSceneItem::nodeAt(const QPointF &viewPosition) const

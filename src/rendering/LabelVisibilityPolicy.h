@@ -8,6 +8,7 @@
 class LabelVisibilityPolicy
 {
 public:
+    [[nodiscard]] static qreal depthOpacity(qreal baseOpacity, qreal zoom);
     [[nodiscard]] static QSet<NodeId> visibleLabels(
         const QVector<LayoutNode> &layout,
         NodeId focusedId,

@@ -113,7 +113,10 @@ Focus changes advance the selected corridor while obsolete siblings recede and
 newly revealed children grow from their attachment points. Live create, rename,
 and delete changes use the same grow/fade vocabulary. Completed fades are
 discarded and cannot participate in hit testing; reduced-motion mode skips all
-transient geometry.
+transient geometry. Zoom progressively restores rear-corridor opacity, while a
+blank-space double-click recenters and advances the camera into that region.
+This reveals already materialized geometry without weakening the hard
+filesystem presentation bound.
 
 QML overlays remain appropriate for conventional controls and the inspector.
 

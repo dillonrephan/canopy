@@ -110,6 +110,7 @@ private:
     void focusNode(NodeId id, bool addToHistory);
     void openFile(const QString &path);
     void setPathMessage(const QString &message);
+    void zoomAt(const QPointF &viewPosition, qreal factor, bool recenter);
     void applyTreeChange(const TreeChangeSet &change);
     void relayout();
 
@@ -125,10 +126,15 @@ private:
     QSet<NodeId> m_liveEnteringNodes;
     QVariantAnimation m_focusAnimation;
     QVariantAnimation m_liveChangeAnimation;
+    QVariantAnimation m_cameraAnimation;
     QPointF m_pan {120.0, 35.0};
+    QPointF m_cameraStartPan;
+    QPointF m_cameraTargetPan;
     QPointF m_lastPointer;
     QString m_pathMessage;
     qreal m_zoom = 1.0;
+    qreal m_cameraStartZoom = 1.0;
+    qreal m_cameraTargetZoom = 1.0;
     qreal m_transitionProgress = 1.0;
     qreal m_liveChangeProgress = 1.0;
     NodeId m_hovered = InvalidNodeId;

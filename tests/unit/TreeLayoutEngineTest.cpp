@@ -23,6 +23,7 @@ private slots:
     void normalZoomPrioritizesHomeLevelLabels();
     void lowZoomKeepsFocusAndEmphasizedLabels();
     void closeZoomRevealsOnlyNonOverlappingDescendants();
+    void zoomClearsRearCorridorFog();
     void navigationStateTracksSelectionAndHistory();
     void layoutProvidesConnectedBranchGeometry();
     void directChildrenUseStaggeredCorridors();
@@ -199,6 +200,14 @@ void TreeLayoutEngineTest::closeZoomRevealsOnlyNonOverlappingDescendants()
     }
 
     QVERIFY(visibleDescendants > 0);
+}
+
+void TreeLayoutEngineTest::zoomClearsRearCorridorFog()
+{
+    QCOMPARE(LabelVisibilityPolicy::depthOpacity(0.32, 1.0), qreal(0.32));
+    QVERIFY(LabelVisibilityPolicy::depthOpacity(0.32, 2.0) > 0.55);
+    QCOMPARE(LabelVisibilityPolicy::depthOpacity(0.32, 3.2), qreal(1.0));
+    QCOMPARE(LabelVisibilityPolicy::depthOpacity(0.32, 5.0), qreal(1.0));
 }
 
 void TreeLayoutEngineTest::navigationStateTracksSelectionAndHistory()

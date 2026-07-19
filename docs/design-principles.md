@@ -43,7 +43,9 @@ and precise even when the supporting branch curves.
 Canopy cannot show every item at every zoom level. Distant views emphasize
 directory structure and density; medium views show meaningful groups; close
 views reveal individual files and labels. Compression should be understandable,
-consistent, and reversible through zoom or focus.
+consistent, and reversible through zoom or focus. Depth fading may manage
+crowding, but zoom must clear that fog; reduced visual weight must never make
+materialized growth unreachable.
 
 ## Conventional escape hatches are permanent
 
@@ -55,7 +57,8 @@ objects alone.
 ## Motion communicates change
 
 Animation explains focus, creation, movement, loading, and search state. Routine
-motion should generally finish in 120–250 ms, remain interruptible, and never
+motion should generally finish in 120–300 ms; deliberate spatial traversal may
+take up to roughly 420 ms. Motion must remain interruptible and never
 block input. Reduced-motion mode replaces spatial animation with immediate state
 changes or short fades.
 

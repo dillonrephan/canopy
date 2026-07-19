@@ -5,6 +5,7 @@
 namespace {
 constexpr qreal kPrimaryLabelZoom = 0.72;
 constexpr qreal kDescendantLabelZoom = 1.25;
+constexpr qreal kFogClearingZoom = 3.2;
 
 struct LabelCandidate {
     const LayoutNode *node = nullptr;
@@ -45,6 +46,13 @@ bool collidesWith(const QRectF &bounds, const QVector<QRectF> &occupied)
         return bounds.intersects(existing);
     });
 }
+}
+
+qreal LabelVisibilityPolicy::depthOpacity(qreal baseOpacity, qreal zoom)
+{
+    const qreal fogLift = qBound(
+        0.0, (zoom - 1.0) / (kFogClearingZoom - 1.0), 1.0);
+    return baseOpacity + (1.0 - baseOpacity) * fogLift;
 }
 
 QSet<NodeId> LabelVisibilityPolicy::visibleLabels(

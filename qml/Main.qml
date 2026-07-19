@@ -201,7 +201,7 @@ ApplicationWindow {
                 Label {
                     id: instruction
                     anchors.centerIn: parent
-                    text: "Scroll to zoom  •  drag to pan  •  click to inspect  •  double-click to enter or open"
+                    text: "Scroll to zoom  •  drag to pan  •  click to inspect  •  double-click a branch to enter, or open space to travel"
                     color: Theme.textDark
                     opacity: 0.78
                     font.pixelSize: 12
