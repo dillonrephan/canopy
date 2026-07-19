@@ -367,10 +367,15 @@ ApplicationWindow {
 
                             Label {
                                 Layout.fillWidth: true
-                                text: Number(tree.selectedMaterializedChildCount).toLocaleString()
-                                      + " of "
-                                      + Number(tree.selectedTotalChildCount).toLocaleString()
-                                      + " entries available"
+                                text: tree.selectedDirectoryState === "Still scanning"
+                                      ? Number(tree.selectedMaterializedChildCount).toLocaleString()
+                                        + " shown · at least "
+                                        + Number(tree.selectedTotalChildCount).toLocaleString()
+                                        + " discovered"
+                                      : Number(tree.selectedMaterializedChildCount).toLocaleString()
+                                        + " of "
+                                        + Number(tree.selectedTotalChildCount).toLocaleString()
+                                        + " entries available"
                                 color: Theme.textDark
                                 font.pixelSize: 12
                                 wrapMode: Text.Wrap

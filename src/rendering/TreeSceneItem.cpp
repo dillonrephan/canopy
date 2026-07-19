@@ -69,6 +69,14 @@ TreeSceneItem::TreeSceneItem(QQuickItem *parent)
                 m_scanningNodeId = InvalidNodeId;
                 applyScanResult(scannedNodeId, result);
             });
+    connect(&m_scanController, &DirectoryScanController::scanUpdated,
+            this, [this](quint64 requestId, const DirectoryScanUpdate &scanUpdate) {
+                if (requestId != m_activeScanRequest
+                    || m_scanningNodeId == InvalidNodeId) {
+                    return;
+                }
+                applyScanUpdate(m_scanningNodeId, scanUpdate);
+            });
 
     relayout();
     scanDirectory(1);
@@ -574,9 +582,26 @@ void TreeSceneItem::scanDirectory(NodeId id)
     directory->directoryState = DirectoryLoadState::Loading;
     directory->directoryStatus = QStringLiteral("Reading directory contents…");
     m_scanningNodeId = id;
-    m_activeScanRequest = m_scanController.requestScan(directory->path);
+    m_activeScanRequest = m_scanController.requestScan(
+        directory->path, DirectoryPresentationPolicy::VisualChildLimit);
     emit selectionChanged();
     update();
+}
+
+void TreeSceneItem::applyScanUpdate(
+    NodeId id, const DirectoryScanUpdate &scanUpdate)
+{
+    FileNode *directory = mutableNode(id);
+    if (!directory)
+        return;
+
+    directory->totalChildCount = scanUpdate.discoveredEntryCount;
+    directory->directoryState = DirectoryLoadState::Loading;
+    directory->directoryStatus = QStringLiteral("Discovered at least %1 entries…")
+                                     .arg(scanUpdate.discoveredEntryCount);
+    appendScannedEntries(id, scanUpdate.entries);
+    relayout();
+    emit selectionChanged();
 }
 
 void TreeSceneItem::applyScanResult(
@@ -591,7 +616,19 @@ void TreeSceneItem::applyScanResult(
     directory->directoryState = result.state;
     directory->directoryStatus = result.status;
 
-    for (const ScannedEntry &entry : result.entries) {
+    appendScannedEntries(id, result.entries);
+    relayout();
+    emit selectionChanged();
+}
+
+void TreeSceneItem::appendScannedEntries(
+    NodeId id, const QVector<ScannedEntry> &entries)
+{
+    FileNode *directory = mutableNode(id);
+    if (!directory)
+        return;
+
+    for (const ScannedEntry &entry : entries) {
         const auto existing = std::find_if(
             m_nodes.begin(), m_nodes.end(), [&entry](const FileNode &candidate) {
                 return candidate.path == entry.path;
@@ -621,11 +658,25 @@ void TreeSceneItem::applyScanResult(
             });
         }
         directory = mutableNode(id);
-        directory->children.append(childId);
+        if (!directory->children.contains(childId))
+            directory->children.append(childId);
     }
 
-    relayout();
-    emit selectionChanged();
+    directory = mutableNode(id);
+    std::sort(
+        directory->children.begin(), directory->children.end(),
+        [this](NodeId leftId, NodeId rightId) {
+            const FileNode *left = node(leftId);
+            const FileNode *right = node(rightId);
+            if (!left || !right)
+                return leftId < rightId;
+            if (left->isDirectory() != right->isDirectory())
+                return left->isDirectory();
+            const int insensitive = QString::compare(
+                left->name, right->name, Qt::CaseInsensitive);
+            return insensitive == 0 ? left->name < right->name
+                                    : insensitive < 0;
+        });
 }
 
 void TreeSceneItem::relayout()

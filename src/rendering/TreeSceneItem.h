@@ -95,7 +95,9 @@ private:
     void selectNode(NodeId id);
     void focusNode(NodeId id, bool addToHistory);
     void scanDirectory(NodeId id);
+    void applyScanUpdate(NodeId id, const DirectoryScanUpdate &update);
     void applyScanResult(NodeId id, const DirectoryScanResult &result);
+    void appendScannedEntries(NodeId id, const QVector<ScannedEntry> &entries);
     void relayout();
 
     QVector<FileNode> m_nodes;
