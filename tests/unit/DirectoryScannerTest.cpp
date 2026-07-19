@@ -20,6 +20,7 @@ private slots:
     void emitsIncrementalBoundedGrowth();
     void scansDeterministicPagesWithoutGrowingMemory();
     void hiddenEntriesFollowVisibilityPolicy();
+    void manuallyResolvedHiddenDirectoryRemainsReachable();
     void reportsInvalidPathsLiterally();
     void supportsCancellation();
     void controllerDeliversOnlyTheLatestRequest();
@@ -180,6 +181,34 @@ void DirectoryScannerTest::hiddenEntriesFollowVisibilityPolicy()
         model.node(model.rootId())->totalChildCount, quint64(2), 3000);
     QTRY_COMPARE_WITH_TIMEOUT(
         model.contentsModel()->totalEntryCount(), qulonglong(2), 3000);
+}
+
+void DirectoryScannerTest::manuallyResolvedHiddenDirectoryRemainsReachable()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    QDir root(temporaryDirectory.path());
+    QVERIFY(root.mkpath(QStringLiteral(".garden/nested")));
+
+    FilesystemTreeModel model(root.path());
+    QTRY_COMPARE_WITH_TIMEOUT(
+        model.node(model.rootId())->directoryState,
+        DirectoryLoadState::Ready,
+        3000);
+    QCOMPARE(model.node(model.rootId())->totalChildCount, quint64(0));
+
+    QString error;
+    const QString hiddenPath = root.filePath(QStringLiteral(".garden/nested"));
+    const NodeId hiddenId = model.ensureDirectory(hiddenPath, &error);
+    QVERIFY2(hiddenId != InvalidNodeId, qPrintable(error));
+    QCOMPARE(model.node(hiddenId)->path, hiddenPath);
+    QVERIFY(model.node(hiddenId)->parentId != InvalidNodeId);
+
+    model.setActiveDirectory(hiddenId);
+    QTRY_COMPARE_WITH_TIMEOUT(
+        model.node(hiddenId)->directoryState,
+        DirectoryLoadState::Ready,
+        3000);
 }
 
 void DirectoryScannerTest::reportsInvalidPathsLiterally()

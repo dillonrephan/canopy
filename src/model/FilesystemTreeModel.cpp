@@ -81,6 +81,76 @@ FileNode *FilesystemTreeModel::mutableNode(NodeId id)
     return nullptr;
 }
 
+NodeId FilesystemTreeModel::ensureDirectory(
+    const QString &path, QString *errorMessage)
+{
+    const QFileInfo requested(path);
+    if (!requested.exists()) {
+        if (errorMessage)
+            *errorMessage = QStringLiteral("That path does not exist.");
+        return InvalidNodeId;
+    }
+    if (!requested.isDir()) {
+        if (errorMessage)
+            *errorMessage = QStringLiteral("That path is not a directory.");
+        return InvalidNodeId;
+    }
+    if (!requested.isReadable()) {
+        if (errorMessage)
+            *errorMessage = QStringLiteral("That directory is not readable.");
+        return InvalidNodeId;
+    }
+
+    const QString targetPath = QDir::cleanPath(requested.absoluteFilePath());
+    if (const NodeId existing = nodeIdForPath(targetPath);
+        existing != InvalidNodeId) {
+        return existing;
+    }
+
+    QStringList missingPaths;
+    QString cursor = targetPath;
+    NodeId parentId = InvalidNodeId;
+    while (true) {
+        if (const NodeId existing = nodeIdForPath(cursor);
+            existing != InvalidNodeId) {
+            parentId = existing;
+            break;
+        }
+        missingPaths.prepend(cursor);
+        const QString parentPath = QFileInfo(cursor).dir().absolutePath();
+        if (parentPath == cursor)
+            break;
+        cursor = parentPath;
+    }
+
+    for (const QString &missingPath : missingPaths) {
+        const QFileInfo info(missingPath);
+        const NodeId id = m_nextNodeId++;
+        m_nodes.append({
+            .id = id,
+            .parentId = parentId,
+            .name = info.fileName().isEmpty()
+                ? missingPath : info.fileName(),
+            .path = missingPath,
+            .kind = NodeKind::Directory,
+            .detail = info.isSymbolicLink()
+                ? QStringLiteral("Symbolic link directory")
+                : QStringLiteral("Directory"),
+            .directoryState = DirectoryLoadState::Unloaded,
+            .directoryStatus = QStringLiteral("Open this branch to scan it."),
+            .isSymbolicLink = info.isSymbolicLink()
+        });
+        if (FileNode *parent = mutableNode(parentId);
+            parent && !parent->children.contains(id)) {
+            parent->children.append(id);
+        }
+        parentId = id;
+    }
+
+    emit treeChanged();
+    return parentId;
+}
+
 void FilesystemTreeModel::setActiveDirectory(NodeId id)
 {
     FileNode *directory = mutableNode(id);
@@ -271,4 +341,13 @@ void FilesystemTreeModel::processWatchedChanges()
             m_contentsModel.reload();
         }
     }
+}
+
+NodeId FilesystemTreeModel::nodeIdForPath(const QString &path) const
+{
+    for (const FileNode &entry : m_nodes) {
+        if (entry.path == path)
+            return entry.id;
+    }
+    return InvalidNodeId;
 }

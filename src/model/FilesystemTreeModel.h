@@ -26,6 +26,8 @@ public:
     }
     [[nodiscard]] const FileNode *node(NodeId id) const;
     [[nodiscard]] FileNode *mutableNode(NodeId id);
+    [[nodiscard]] NodeId ensureDirectory(
+        const QString &path, QString *errorMessage = nullptr);
     [[nodiscard]] DirectoryContentsModel *contentsModel() noexcept
     {
         return &m_contentsModel;
@@ -47,6 +49,7 @@ private:
     void appendScannedEntries(NodeId id, const QVector<ScannedEntry> &entries);
     void updateWatchedDirectories();
     void processWatchedChanges();
+    [[nodiscard]] NodeId nodeIdForPath(const QString &path) const;
 
     QVector<FileNode> m_nodes;
     DirectoryContentsModel m_contentsModel;
