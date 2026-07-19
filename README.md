@@ -25,9 +25,9 @@ The project has entered Phase 2 with a deliberately narrow read-only filesystem
 slice:
 
 - one desktop window
-- asynchronous, cancellable scanning of the real home directory
+- asynchronous, cancellable scanning with incremental branch growth
 - one-directory-at-a-time navigation with no recursive crawl
-- bounded materialization and a conventional Contents fallback
+- 16-entry tree materialization and 64-entry paged Contents
 - explicit loading, partial, inaccessible, and error states
 - extension-based MIME classification without reading file contents
 - deterministic botanical branch layout
@@ -40,6 +40,8 @@ slice:
 
 Hidden files, thumbnails, opening files, filesystem mutation, Garden View,
 packaging, and broad theme customization remain outside this checkpoint.
+Contents pages are cursor-based and memory-bounded, though each alphabetically
+sorted page currently requires a fresh background enumeration.
 
 ## Technology direction
 

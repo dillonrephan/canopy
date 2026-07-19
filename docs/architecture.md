@@ -41,10 +41,18 @@ Extreme counts never require an extreme in-memory child vector.
 ### Filesystem scanning
 
 The read-only scanner enumerates one requested directory on a worker thread. It
-counts visible entries while retaining at most 256 sorted entry records, checks
-for cancellation between entries, and never recursively follows the directory
-tree. A generation controller ensures that only the newest navigation request
-can update the model.
+makes a directory-first pass, emits retained tree entries in four-entry growth
+batches, checks for cancellation between entries, and never recursively follows
+the directory tree. The semantic tree retains at most 16 entries for a scanned
+directory. A generation controller ensures that only the newest navigation
+request can update the model.
+
+The conventional Contents model holds one 64-entry page. Page cursors are based
+on the last deterministic ordering key rather than an accumulating row offset,
+so later pages do not require earlier pages to remain in memory. Each page query
+currently enumerates the directory on a worker thread to find the next bounded
+sorted page; a future indexed backend may optimize repeated enumeration without
+changing the model boundary.
 
 Hidden entries are excluded at this checkpoint. Symbolic links are identified
 literally and are never followed automatically by the scanner.
@@ -136,11 +144,11 @@ Avoid creating empty subsystem scaffolding before it has a concrete use.
 ## Data flow
 
 ```text
-bounded scanner -> semantic model -> navigation state -> layout -> renderer
-                         |                                      |
-                         +----------> QML inspector <------------+
-                                         |
-                                   user interaction
+incremental scanner -> semantic model -> navigation -> layout -> renderer
+        |                    |                                 |
+        +-> paged contents --+--------> QML inspector <--------+
+                                             |
+                                       user interaction
 ```
 
 File operations will become a separate queued backend; they never pass through

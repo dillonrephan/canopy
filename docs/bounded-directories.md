@@ -13,8 +13,10 @@ as an individual botanical form.
 - The layout reports how many children remain outside the visual presentation.
 - Directories that are incomplete or exceed the visual budget request the
   conventional Contents fallback.
-- Production scans count visible entries while retaining at most 256 sorted
-  records for the current directory.
+- Production tree scans count visible entries while retaining at most 16
+  directory-first records for the current directory.
+- Retained tree entries arrive in batches of four while counting continues.
+- The Contents model retains one deterministic page of at most 64 entries.
 - The fake Large Dataset test fixture reports 1,000,000 entries while
   materializing only 16 samples.
 
@@ -27,12 +29,13 @@ must not remove the hard bound.
 
 The inspector provides separate Details and Contents views. Selecting a bounded
 or incomplete directory opens Contents automatically, reports the real state and
-counts, and shows only the currently materialized sample. QML virtualizes the
-delegates, while the scanner limits the current list to 256 entry names.
+counts, and shows one 64-entry page. Previous and Next replace the page rather
+than accumulating names in QML, and ListView virtualizes its delegates.
 
-The next iteration must replace the copied name list with a paged model that can
-deliver partial results incrementally without copying an entire large directory
-into QML.
+Page queries use the last entry's deterministic ordering key as their cursor.
+This removes a fixed directory-size ceiling while keeping memory proportional to
+one page. Each page currently performs a fresh background enumeration; indexing
+or durable scan snapshots can optimize that cost later.
 
 ## Error semantics
 
@@ -47,4 +50,5 @@ distinct states with literal messages and recovery actions where possible.
 - Total counts never imply that all entries are loaded.
 - Partial results are identified as partial.
 - The user always has a conventional path to precise contents.
-- Future scanners must be asynchronous, cancellable, and memory-bounded.
+- Scanners and page queries must remain asynchronous, cancellable, and
+  memory-bounded.

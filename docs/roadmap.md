@@ -62,12 +62,12 @@ Gate: do not proceed until the visual tree is useful rather than merely novel.
 ## Phase 2 — Read-only filesystem
 
 - [x] asynchronous home-directory scanning
-- [x] bounded loading and cancellation
-- [x] virtualized Contents fallback for directories beyond the visual budget
+- [x] incremental bounded loading and cancellation
+- [x] cursor-paged, virtualized Contents fallback
 - [x] extension-based MIME classification
 - [x] directory navigation
 - [x] explicit symlink, inaccessible-path, and scan-error metadata
-- [ ] incremental result delivery and paged Contents loading
+- [x] incremental result delivery and paged Contents loading
 - hidden-file toggle
 - default-application opening
 - thumbnails and previews
