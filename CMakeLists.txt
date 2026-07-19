@@ -31,6 +31,8 @@ qt_add_qml_module(canopy
         src/filesystem/DirectoryContentsModel.h
         src/model/DirectoryPresentationPolicy.cpp
         src/model/DirectoryPresentationPolicy.h
+        src/model/FilesystemTreeModel.cpp
+        src/model/FilesystemTreeModel.h
         src/model/FileNode.h
         src/navigation/NavigationState.cpp
         src/navigation/NavigationState.h
@@ -82,6 +84,8 @@ if(BUILD_TESTING)
         src/filesystem/DirectoryContentsModel.cpp
         src/filesystem/DirectoryScanController.cpp
         src/filesystem/DirectoryScanner.cpp
+        src/model/DirectoryPresentationPolicy.cpp
+        src/model/FilesystemTreeModel.cpp
     )
     target_include_directories(canopy_directory_scanner_tests PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src/filesystem

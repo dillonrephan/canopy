@@ -1,6 +1,7 @@
 #include "DirectoryScanController.h"
 #include "DirectoryScanner.h"
 #include "DirectoryContentsModel.h"
+#include "FilesystemTreeModel.h"
 
 #include <QDir>
 #include <QFile>
@@ -22,6 +23,7 @@ private slots:
     void supportsCancellation();
     void controllerDeliversOnlyTheLatestRequest();
     void contentsModelPagesWithoutRetainingEarlierPages();
+    void filesystemModelObservesExternalDirectoryChanges();
 };
 
 namespace {
@@ -238,6 +240,42 @@ void DirectoryScannerTest::contentsModelPagesWithoutRetainingEarlierPages()
     QCOMPARE(
         model.data(model.index(0), DirectoryContentsModel::NameRole).toString(),
         QStringLiteral("entry-000.txt"));
+}
+
+void DirectoryScannerTest::filesystemModelObservesExternalDirectoryChanges()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    FilesystemTreeModel model(temporaryDirectory.path());
+
+    QTRY_COMPARE_WITH_TIMEOUT(
+        model.node(model.rootId())->directoryState,
+        DirectoryLoadState::Ready,
+        3000);
+    QCOMPARE(model.node(model.rootId())->totalChildCount, quint64(0));
+
+    const QString sproutPath =
+        temporaryDirectory.filePath(QStringLiteral("sprout.txt"));
+    createFile(sproutPath, "new growth");
+    QTRY_VERIFY_WITH_TIMEOUT(
+        std::ranges::any_of(
+            model.nodes(), [&sproutPath](const FileNode &node) {
+                return node.path == sproutPath
+                    && node.parentId == NodeId(1);
+            }),
+        5000);
+    QTRY_COMPARE_WITH_TIMEOUT(
+        model.node(model.rootId())->totalChildCount, quint64(1), 5000);
+
+    QVERIFY(QFile::remove(sproutPath));
+    QTRY_COMPARE_WITH_TIMEOUT(
+        model.node(model.rootId())->totalChildCount, quint64(0), 5000);
+    QVERIFY(std::ranges::none_of(
+        model.node(model.rootId())->children,
+        [&model, &sproutPath](NodeId childId) {
+            const FileNode *child = model.node(childId);
+            return child && child->path == sproutPath;
+        }));
 }
 
 QTEST_GUILESS_MAIN(DirectoryScannerTest)
