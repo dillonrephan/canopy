@@ -4,6 +4,7 @@
 #include "NavigationState.h"
 #include "ThemeRegistry.h"
 #include "TreeLayoutEngine.h"
+#include "WorldLayoutEngine.h"
 
 #include <QSet>
 #include <QtTest>
@@ -17,6 +18,8 @@ class TreeLayoutEngineTest final : public QObject
 private slots:
     void fixtureHasStableRelationships();
     void activeThemeProfileIsComplete();
+    void worldPlacementMatchesPlanarLanes();
+    void worldPlacementRemainsStableWhenChildIsAdded();
     void layoutIsDeterministic();
     void focusedDirectoryKeepsParentContext();
     void wideDirectoryUsesUniquePositions();
@@ -70,6 +73,65 @@ void TreeLayoutEngineTest::activeThemeProfileIsComplete()
     QCOMPARE(theme.planar.corridorCount,
              theme.presentation.foregroundCorridorCount
                  + theme.presentation.fogHintCount);
+}
+
+void TreeLayoutEngineTest::worldPlacementMatchesPlanarLanes()
+{
+    const QVector<FileNode> nodes = FakeTreeData::create();
+    const WorldLayoutEngine worldEngine;
+    const TreeLayoutEngine planarEngine;
+    const WorldLayout world = worldEngine.layout(nodes, 1);
+    const QVector<LayoutNode> planar = planarEngine.layout(nodes, 1);
+
+    QCOMPARE(world.focusedId, NodeId(1));
+    QCOMPARE(world.nodes.size(), planar.size());
+    for (const WorldNodePlacement &placement : world.nodes) {
+        const auto projected = std::ranges::find_if(
+            planar, [&placement](const LayoutNode &node) {
+                return node.id == placement.id;
+            });
+        QVERIFY(projected != planar.cend());
+        if (placement.role == WorldNodeRole::DirectChild) {
+            QCOMPARE(placement.semanticDepth, 1);
+            QVERIFY(placement.distanceAlongParent > 0.0);
+            QCOMPARE(placement.lane, projected->corridorSlot);
+        }
+    }
+}
+
+void TreeLayoutEngineTest::worldPlacementRemainsStableWhenChildIsAdded()
+{
+    QVector<FileNode> nodes = FakeTreeData::create();
+    WorldLayoutEngine engine;
+    const WorldLayout before = engine.layout(nodes, 1);
+    QHash<NodeId, WorldNodePlacement> originalChildren;
+    for (const WorldNodePlacement &placement : before.nodes) {
+        if (placement.role == WorldNodeRole::DirectChild)
+            originalChildren.insert(placement.id, placement);
+    }
+
+    const NodeId addedId = static_cast<NodeId>(nodes.size() + 1);
+    nodes.first().children.append(addedId);
+    ++nodes.first().totalChildCount;
+    nodes.append({
+        .id = addedId,
+        .parentId = 1,
+        .name = QStringLiteral("New Growth"),
+        .path = QStringLiteral("/home/dillon/New Growth"),
+        .kind = NodeKind::Directory
+    });
+
+    const WorldLayout after = engine.layout(nodes, 1);
+    for (const WorldNodePlacement &placement : after.nodes) {
+        if (!originalChildren.contains(placement.id))
+            continue;
+        const WorldNodePlacement original =
+            originalChildren.value(placement.id);
+        QCOMPARE(placement.lane, original.lane);
+        QCOMPARE(placement.distanceAlongParent,
+                 original.distanceAlongParent);
+        QCOMPARE(placement.semanticDepth, original.semanticDepth);
+    }
 }
 
 void TreeLayoutEngineTest::layoutIsDeterministic()

@@ -23,6 +23,9 @@ qt_add_qml_module(canopy
     SOURCES
         src/layout/TreeLayoutEngine.cpp
         src/layout/TreeLayoutEngine.h
+        src/layout/WorldLayout.h
+        src/layout/WorldLayoutEngine.cpp
+        src/layout/WorldLayoutEngine.h
         src/filesystem/DirectoryScanner.cpp
         src/filesystem/DirectoryScanner.h
         src/filesystem/DirectoryScanController.cpp
@@ -71,6 +74,7 @@ if(BUILD_TESTING)
     qt_add_executable(canopy_unit_tests
         tests/unit/TreeLayoutEngineTest.cpp
         src/layout/TreeLayoutEngine.cpp
+        src/layout/WorldLayoutEngine.cpp
         src/model/DirectoryPresentationPolicy.cpp
         src/model/FakeTreeData.cpp
         src/navigation/NavigationState.cpp
