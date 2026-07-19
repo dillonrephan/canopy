@@ -1,41 +1,9 @@
 #pragma once
 
-#include <QColor>
-#include <QObject>
-#include <QString>
-#include <QtQmlIntegration/qqmlintegration.h>
+#include "ThemeProfile.h"
 
-struct ThemeValues {
-    int version = 1;
-    QString name;
-    QColor sceneCanvas;
-    QColor shellSurface;
-    QColor panelSurface;
-    QColor raisedSurface;
-    QColor border;
-    QColor textDark;
-    QColor textLight;
-    QColor wood;
-    QColor woodHover;
-    QColor woodShadow;
-    QColor selection;
-    QColor hover;
-    QColor document;
-    QColor image;
-    QColor audio;
-    QColor code;
-    QColor archive;
-    QColor flowerCenter;
-    QColor noticeSurface;
-    QColor noticeAccent;
-    qreal focusedBranchWidth = 13.0;
-    qreal directoryBranchWidth = 9.0;
-    qreal fileStemWidth = 3.0;
-    qreal selectionHaloWidth = 6.0;
-    qreal junctionRadius = 4.5;
-    qreal hoveredJunctionRadius = 6.5;
-    int focusAnimationDuration = 420;
-};
+#include <QObject>
+#include <QtQmlIntegration/qqmlintegration.h>
 
 class ThemeTokens final : public QObject
 {
@@ -79,41 +47,47 @@ public:
     {
     }
 
-    [[nodiscard]] static const ThemeValues &active();
+    [[nodiscard]] static const ThemeProfile &active();
 
     [[nodiscard]] int version() const { return active().version; }
     [[nodiscard]] QString name() const { return active().name; }
-    [[nodiscard]] QColor sceneCanvas() const { return active().sceneCanvas; }
-    [[nodiscard]] QColor shellSurface() const { return active().shellSurface; }
-    [[nodiscard]] QColor panelSurface() const { return active().panelSurface; }
-    [[nodiscard]] QColor raisedSurface() const { return active().raisedSurface; }
-    [[nodiscard]] QColor border() const { return active().border; }
-    [[nodiscard]] QColor textDark() const { return active().textDark; }
-    [[nodiscard]] QColor textLight() const { return active().textLight; }
-    [[nodiscard]] QColor wood() const { return active().wood; }
-    [[nodiscard]] QColor woodHover() const { return active().woodHover; }
-    [[nodiscard]] QColor woodShadow() const { return active().woodShadow; }
-    [[nodiscard]] QColor selection() const { return active().selection; }
-    [[nodiscard]] QColor hover() const { return active().hover; }
-    [[nodiscard]] QColor document() const { return active().document; }
-    [[nodiscard]] QColor image() const { return active().image; }
-    [[nodiscard]] QColor audio() const { return active().audio; }
-    [[nodiscard]] QColor code() const { return active().code; }
-    [[nodiscard]] QColor archive() const { return active().archive; }
-    [[nodiscard]] QColor flowerCenter() const { return active().flowerCenter; }
-    [[nodiscard]] QColor noticeSurface() const { return active().noticeSurface; }
-    [[nodiscard]] QColor noticeAccent() const { return active().noticeAccent; }
-    [[nodiscard]] qreal focusedBranchWidth() const { return active().focusedBranchWidth; }
-    [[nodiscard]] qreal directoryBranchWidth() const { return active().directoryBranchWidth; }
-    [[nodiscard]] qreal fileStemWidth() const { return active().fileStemWidth; }
-    [[nodiscard]] qreal selectionHaloWidth() const { return active().selectionHaloWidth; }
-    [[nodiscard]] qreal junctionRadius() const { return active().junctionRadius; }
+    [[nodiscard]] QColor sceneCanvas() const { return active().palette.sceneCanvas; }
+    [[nodiscard]] QColor shellSurface() const { return active().palette.shellSurface; }
+    [[nodiscard]] QColor panelSurface() const { return active().palette.panelSurface; }
+    [[nodiscard]] QColor raisedSurface() const { return active().palette.raisedSurface; }
+    [[nodiscard]] QColor border() const { return active().palette.border; }
+    [[nodiscard]] QColor textDark() const { return active().palette.textDark; }
+    [[nodiscard]] QColor textLight() const { return active().palette.textLight; }
+    [[nodiscard]] QColor wood() const { return active().palette.wood; }
+    [[nodiscard]] QColor woodHover() const { return active().palette.woodHover; }
+    [[nodiscard]] QColor woodShadow() const { return active().palette.woodShadow; }
+    [[nodiscard]] QColor selection() const { return active().palette.selection; }
+    [[nodiscard]] QColor hover() const { return active().palette.hover; }
+    [[nodiscard]] QColor document() const { return active().palette.document; }
+    [[nodiscard]] QColor image() const { return active().palette.image; }
+    [[nodiscard]] QColor audio() const { return active().palette.audio; }
+    [[nodiscard]] QColor code() const { return active().palette.code; }
+    [[nodiscard]] QColor archive() const { return active().palette.archive; }
+    [[nodiscard]] QColor flowerCenter() const { return active().palette.flowerCenter; }
+    [[nodiscard]] QColor noticeSurface() const { return active().palette.noticeSurface; }
+    [[nodiscard]] QColor noticeAccent() const { return active().palette.noticeAccent; }
+    [[nodiscard]] qreal focusedBranchWidth() const { return active().branches.focusedWidth; }
+    [[nodiscard]] qreal directoryBranchWidth() const { return active().branches.directoryWidth; }
+    [[nodiscard]] qreal fileStemWidth() const { return active().branches.fileStemWidth; }
+    [[nodiscard]] qreal selectionHaloWidth() const
+    {
+        return active().branches.selectionHaloWidth;
+    }
+    [[nodiscard]] qreal junctionRadius() const
+    {
+        return active().branches.junctionRadius;
+    }
     [[nodiscard]] qreal hoveredJunctionRadius() const
     {
-        return active().hoveredJunctionRadius;
+        return active().branches.hoveredJunctionRadius;
     }
     [[nodiscard]] int focusAnimationDuration() const
     {
-        return active().focusAnimationDuration;
+        return active().motion.focusDuration;
     }
 };

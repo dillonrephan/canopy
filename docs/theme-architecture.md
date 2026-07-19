@@ -123,7 +123,7 @@ focus. Labels remain screen-aligned and appear as their junctions approach.
 
 Each numbered stage should be a coherent, buildable commit:
 
-1. Extract current palette, metrics, motion, and presentation values into a
+1. **Complete:** Extract current palette, metrics, motion, and presentation values into a
    statically registered Sakura profile without changing behavior.
 2. Introduce explicit camera/view state and stable world-layout output.
 3. Reproduce the current renderer through a planar projection module.

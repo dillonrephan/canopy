@@ -2,7 +2,7 @@
 
 #include "DirectoryPresentationPolicy.h"
 #include "LabelVisibilityPolicy.h"
-#include "ThemeTokens.h"
+#include "ThemeRegistry.h"
 
 #include <QColor>
 #include <QCursor>
@@ -20,10 +20,6 @@
 #include <QtMath>
 
 namespace {
-constexpr qreal kMinZoom = 0.48;
-constexpr qreal kMaxZoom = 5.0;
-constexpr qreal kBlankDoubleClickZoom = 1.7;
-
 QPainterPath staticBranchPath(const LayoutNode &layout)
 {
     QPainterPath result(layout.branchStart);
@@ -36,14 +32,15 @@ QPainterPath staticBranchPath(const LayoutNode &layout)
 TreeSceneItem::TreeSceneItem(QQuickItem *parent)
     : QQuickPaintedItem(parent)
 {
+    const ThemeProfile &theme = ThemeRegistry::active();
     setAcceptedMouseButtons(Qt::LeftButton | Qt::MiddleButton);
     setAcceptHoverEvents(true);
     setAntialiasing(true);
 
-    m_focusAnimation.setDuration(ThemeTokens::active().focusAnimationDuration);
+    m_focusAnimation.setDuration(theme.motion.focusDuration);
     m_focusAnimation.setStartValue(0.0);
     m_focusAnimation.setEndValue(1.0);
-    m_focusAnimation.setEasingCurve(QEasingCurve::OutCubic);
+    m_focusAnimation.setEasingCurve(theme.motion.focusEasing);
     connect(&m_focusAnimation, &QVariantAnimation::valueChanged, this,
             [this](const QVariant &value) {
                 m_transitionProgress = value.toReal();
@@ -56,10 +53,10 @@ TreeSceneItem::TreeSceneItem(QQuickItem *parent)
         m_departingLayout.clear();
         update();
     });
-    m_liveChangeAnimation.setDuration(260);
+    m_liveChangeAnimation.setDuration(theme.motion.liveChangeDuration);
     m_liveChangeAnimation.setStartValue(0.0);
     m_liveChangeAnimation.setEndValue(1.0);
-    m_liveChangeAnimation.setEasingCurve(QEasingCurve::OutCubic);
+    m_liveChangeAnimation.setEasingCurve(theme.motion.liveChangeEasing);
     connect(&m_liveChangeAnimation, &QVariantAnimation::valueChanged, this,
             [this](const QVariant &value) {
                 m_liveChangeProgress = value.toReal();
@@ -72,10 +69,10 @@ TreeSceneItem::TreeSceneItem(QQuickItem *parent)
         m_liveDepartingLayout.clear();
         update();
     });
-    m_cameraAnimation.setDuration(280);
+    m_cameraAnimation.setDuration(theme.motion.cameraDuration);
     m_cameraAnimation.setStartValue(0.0);
     m_cameraAnimation.setEndValue(1.0);
-    m_cameraAnimation.setEasingCurve(QEasingCurve::OutCubic);
+    m_cameraAnimation.setEasingCurve(theme.motion.cameraEasing);
     connect(&m_cameraAnimation, &QVariantAnimation::valueChanged, this,
             [this](const QVariant &value) {
                 const qreal progress = value.toReal();
@@ -107,7 +104,10 @@ TreeSceneItem::TreeSceneItem(QQuickItem *parent)
 
 void TreeSceneItem::paint(QPainter *painter)
 {
-    const ThemeValues &theme = ThemeTokens::active();
+    const ThemeProfile &profile = ThemeRegistry::active();
+    const ThemePalette &theme = profile.palette;
+    const BranchStyle &branches = profile.branches;
+    const LabelStyle &labels = profile.labels;
     painter->setRenderHint(QPainter::Antialiasing, true);
     painter->fillRect(boundingRect(), theme.sceneCanvas);
     painter->save();
@@ -124,7 +124,8 @@ void TreeSceneItem::paint(QPainter *painter)
         m_hovered, m_zoom);
     for (const LayoutNode &layout : std::as_const(m_layout)) {
         if (LabelVisibilityPolicy::depthOpacity(
-                layout.depthOpacity, m_zoom) < 0.55
+                layout.depthOpacity, m_zoom)
+            < labels.rearVisibilityThreshold
             && layout.id != m_navigation.selectedId()
             && layout.id != m_hovered) {
             visibleLabels.remove(layout.id);
@@ -132,7 +133,7 @@ void TreeSceneItem::paint(QPainter *painter)
     }
 
     const auto paintDeparting =
-        [this, painter, &theme](
+        [this, painter, &theme, &branches](
             const QVector<LayoutNode> &layouts, qreal opacity) {
         if (opacity <= 0.0 || layouts.isEmpty())
             return;
@@ -147,7 +148,7 @@ void TreeSceneItem::paint(QPainter *painter)
                 branchColor.alphaF() * layout.depthOpacity);
             const qreal depthScale = 1.0 - layout.depthLayer * 0.07;
             const qreal branchWidth = (entry->isDirectory()
-                ? theme.directoryBranchWidth : theme.fileStemWidth)
+                ? branches.directoryWidth : branches.fileStemWidth)
                 * depthScale;
             painter->setPen(QPen(branchColor, branchWidth,
                                  Qt::SolidLine, Qt::RoundCap));
@@ -155,8 +156,8 @@ void TreeSceneItem::paint(QPainter *painter)
             painter->setPen(Qt::NoPen);
             painter->setBrush(branchColor);
             painter->drawEllipse(layout.position,
-                                 theme.junctionRadius,
-                                 theme.junctionRadius);
+                                 branches.junctionRadius,
+                                 branches.junctionRadius);
         }
         painter->restore();
     };
@@ -168,7 +169,7 @@ void TreeSceneItem::paint(QPainter *painter)
         focusedLayout && focusedLayout->crownEnd != focusedLayout->position) {
         const QPainterPath crown = drawnCrownPath(*focusedLayout);
         painter->setPen(QPen(theme.wood,
-                             theme.focusedBranchWidth * 0.72,
+                             branches.focusedWidth * 0.72,
                              Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         painter->drawPath(crown);
     }
@@ -203,14 +204,14 @@ void TreeSceneItem::paint(QPainter *painter)
 
         const qreal depthScale = 1.0 - layout.depthLayer * 0.07;
         const qreal branchWidth = (directory
-            ? (focused ? theme.focusedBranchWidth : theme.directoryBranchWidth)
-            : theme.fileStemWidth) * depthScale;
+            ? (focused ? branches.focusedWidth : branches.directoryWidth)
+            : branches.fileStemWidth) * depthScale;
         if (directory && (selected || hovered)) {
             QColor emphasis = selected ? theme.selection : theme.hover;
             if (layout.parentContext)
                 emphasis.setAlphaF(0.55);
             painter->setPen(QPen(emphasis,
-                                 branchWidth + theme.selectionHaloWidth,
+                                 branchWidth + branches.selectionHaloWidth,
                                  Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
             painter->drawPath(branch);
         }
@@ -247,7 +248,8 @@ void TreeSceneItem::paint(QPainter *painter)
                                  selected ? 2.5 : 1.5));
             painter->setBrush(hovered ? theme.woodHover : theme.wood);
             const qreal junctionRadius = hovered
-                ? theme.hoveredJunctionRadius : theme.junctionRadius;
+                ? branches.hoveredJunctionRadius
+                : branches.junctionRadius;
             painter->drawEllipse(position, junctionRadius, junctionRadius);
         } else if (entry->kind == NodeKind::Image) {
             painter->setPen(QPen(selected ? theme.selection : theme.woodShadow,
@@ -284,7 +286,10 @@ void TreeSceneItem::paint(QPainter *painter)
         if (visibleLabels.contains(layout.id)) {
             painter->setPen(theme.textDark);
             QFont labelFont = painter->font();
-            labelFont.setPixelSize(selected ? 14 : entry->isDirectory() ? 13 : 12);
+            labelFont.setPixelSize(
+                selected ? labels.selectedPixelSize
+                : entry->isDirectory() ? labels.directoryPixelSize
+                : labels.filePixelSize);
             labelFont.setWeight(selected || entry->isDirectory()
                                     ? QFont::DemiBold : QFont::Normal);
             painter->setFont(labelFont);
@@ -304,7 +309,7 @@ void TreeSceneItem::paint(QPainter *painter)
         painter->save();
         painter->setPen(theme.textDark);
         QFont countFont = painter->font();
-        countFont.setPixelSize(12);
+        countFont.setPixelSize(labels.overflowPixelSize);
         countFont.setWeight(QFont::DemiBold);
         painter->setFont(countFont);
         const QString countText = QStringLiteral("+%1 more in Contents")
@@ -559,7 +564,9 @@ void TreeSceneItem::mouseDoubleClickEvent(QMouseEvent *event)
     } else {
         m_panning = false;
         unsetCursor();
-        zoomAt(event->position(), kBlankDoubleClickZoom, true);
+        zoomAt(event->position(),
+               ThemeRegistry::active().camera.blankDoubleClickFactor,
+               true);
     }
     event->accept();
 }
@@ -585,7 +592,9 @@ void TreeSceneItem::mouseReleaseEvent(QMouseEvent *event)
 
 void TreeSceneItem::wheelEvent(QWheelEvent *event)
 {
-    const qreal factor = qPow(1.0015, event->angleDelta().y());
+    const qreal factor = qPow(
+        ThemeRegistry::active().camera.wheelBase,
+        event->angleDelta().y());
     zoomAt(event->position(), factor, false);
     event->accept();
 }
@@ -599,8 +608,10 @@ void TreeSceneItem::zoomAt(
     const QPointF &viewPosition, qreal factor, bool recenter)
 {
     m_cameraAnimation.stop();
+    const CameraProfile &camera = ThemeRegistry::active().camera;
     const QPointF anchor = toScene(viewPosition);
-    const qreal nextZoom = qBound(kMinZoom, m_zoom * factor, kMaxZoom);
+    const qreal nextZoom = qBound(
+        camera.minimumZoom, m_zoom * factor, camera.maximumZoom);
     const QPointF destination = recenter
         ? boundingRect().center() : viewPosition;
     const QPointF nextPan = destination - anchor * nextZoom;
@@ -738,7 +749,7 @@ QString TreeSceneItem::kindName(NodeKind kind) const
 
 QColor TreeSceneItem::kindColor(NodeKind kind) const
 {
-    const ThemeValues &theme = ThemeTokens::active();
+    const ThemePalette &theme = ThemeRegistry::active().palette;
     switch (kind) {
     case NodeKind::Directory: return theme.wood;
     case NodeKind::Document: return theme.document;

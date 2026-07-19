@@ -1,6 +1,7 @@
 #include "TreeLayoutEngine.h"
 
 #include "DirectoryPresentationPolicy.h"
+#include "ThemeRegistry.h"
 
 #include <QSet>
 #include <QtMath>
@@ -8,12 +9,6 @@
 #include <algorithm>
 
 namespace {
-constexpr QPointF kFocusPosition {420.0, 500.0};
-constexpr qreal kLabelWidth = 164.0;
-constexpr qreal kLabelHeight = 34.0;
-constexpr qreal kLabelGap = 8.0;
-constexpr qsizetype kCorridorCount = 16;
-
 void setBranchGeometry(LayoutNode &node)
 {
     const QPointF delta = node.position - node.branchStart;
@@ -36,12 +31,13 @@ LayoutNode makeLayoutNode(NodeId id,
                           qreal radius,
                           bool parentContext = false)
 {
+    const LabelStyle &labels = ThemeRegistry::active().labels;
     LayoutNode result {id, parentId, position, radius, parentContext};
     result.labelBounds = {
-        position.x() - kLabelWidth * 0.5,
-        position.y() + radius + kLabelGap,
-        kLabelWidth,
-        kLabelHeight
+        position.x() - labels.boundsWidth * 0.5,
+        position.y() + radius + labels.gap,
+        labels.boundsWidth,
+        labels.boundsHeight
     };
     result.branchStart = branchStart;
     result.crownEnd = position;
@@ -58,21 +54,31 @@ struct CorridorGeometry {
 
 CorridorGeometry corridorGeometry(int slot)
 {
-    slot = qBound(0, slot, static_cast<int>(kCorridorCount - 1));
+    const PlanarLayoutProfile &planar = ThemeRegistry::active().planar;
+    slot = qBound(0, slot, planar.corridorCount - 1);
     const int side = slot % 2 == 0 ? -1 : 1;
     const int pair = slot / 2;
-    const int lateralBand = pair % 4;
-    const int depthBand = pair / 4;
-    const qreal distance = 150.0 + lateralBand * 65.0;
+    const int lateralBandCount = planar.primaryCorridorCount / 2;
+    const int lateralBand = pair % lateralBandCount;
+    const int depthBand = pair / lateralBandCount;
+    const qreal distance = planar.initialLateralDistance
+        + lateralBand * planar.lateralDistanceStep;
     const qreal endpointY =
-        (depthBand == 0 ? 300.0 : 130.0) + lateralBand * 42.0;
+        (depthBand == 0
+             ? planar.frontEndpointY : planar.rearEndpointY)
+        + lateralBand * planar.endpointYStep;
     const qreal attachmentY =
-        kFocusPosition.y() - 14.0 - pair * 15.0 - (side > 0 ? 6.0 : 0.0);
+        planar.focusPosition.y() - planar.firstAttachmentOffset
+        - pair * planar.attachmentStep
+        - (side > 0 ? planar.rightAttachmentOffset : 0.0);
     const qreal opacity = depthBand == 0
-        ? 1.0 : 0.68 - (pair - 4) * 0.12;
+        ? 1.0
+        : planar.rearInitialOpacity
+            - (pair - lateralBandCount) * planar.rearOpacityStep;
     return {
-        .endpoint = {kFocusPosition.x() + side * distance, endpointY},
-        .attachment = {kFocusPosition.x(), attachmentY},
+        .endpoint = {
+            planar.focusPosition.x() + side * distance, endpointY},
+        .attachment = {planar.focusPosition.x(), attachmentY},
         .depthLayer = depthBand + 1,
         .opacity = opacity
     };
@@ -86,17 +92,19 @@ QVector<LayoutNode> TreeLayoutEngine::layout(const QVector<FileNode> &nodes,
     const FileNode *focused = findNode(nodes, focusedId);
     if (!focused)
         return result;
+    const PlanarLayoutProfile &planar = ThemeRegistry::active().planar;
 
-    QPointF focusedBranchStart {420.0, 650.0};
+    QPointF focusedBranchStart = planar.rootBranchStart;
     if (const FileNode *parent = findNode(nodes, focused->parentId)) {
         result.append(makeLayoutNode(parent->id, InvalidNodeId,
-                                     {420.0, 635.0}, {420.0, 710.0},
-                                     17.0, true));
-        focusedBranchStart = {420.0, 635.0};
+                                     planar.parentPosition,
+                                     planar.parentBranchStart,
+                                     planar.parentRadius, true));
+        focusedBranchStart = planar.parentPosition;
     }
 
-    result.append(makeLayoutNode(focused->id, focused->parentId, kFocusPosition,
-                                 focusedBranchStart,
+    result.append(makeLayoutNode(focused->id, focused->parentId,
+                                 planar.focusPosition, focusedBranchStart,
                                  radiusFor(*focused, true)));
 
     const DirectoryPresentation presentation =
@@ -112,7 +120,7 @@ QVector<LayoutNode> TreeLayoutEngine::layout(const QVector<FileNode> &nodes,
     }
 
     const QVector<int> assignedSlots = corridorSlots(visibleChildren);
-    qreal highestAttachment = kFocusPosition.y();
+    qreal highestAttachment = planar.focusPosition.y();
     QHash<NodeId, QPointF> childPositions;
     for (qsizetype i = 0; i < visibleChildren.size(); ++i) {
         const FileNode *child = visibleChildren.at(i);
@@ -133,7 +141,7 @@ QVector<LayoutNode> TreeLayoutEngine::layout(const QVector<FileNode> &nodes,
         highestAttachment = qMin(highestAttachment, corridor.attachment.y());
     }
     result[findNode(nodes, focused->parentId) ? 1 : 0].crownEnd =
-        {kFocusPosition.x(), highestAttachment};
+        {planar.focusPosition.x(), highestAttachment};
 
     if (visibleChildCount <= 8) {
         for (const FileNode *child : visibleChildren) {
@@ -184,6 +192,7 @@ qreal TreeLayoutEngine::radiusFor(const FileNode &node, bool focused)
 QVector<int> TreeLayoutEngine::corridorSlots(
     const QVector<const FileNode *> &children) const
 {
+    const PlanarLayoutProfile &planar = ThemeRegistry::active().planar;
     QVector<const FileNode *> allocationOrder = children;
     std::sort(
         allocationOrder.begin(), allocationOrder.end(),
@@ -194,7 +203,7 @@ QVector<int> TreeLayoutEngine::corridorSlots(
     QSet<int> usedSlots;
     for (const FileNode *child : allocationOrder) {
         const int existing = m_corridorSlots.value(child->id, -1);
-        if (existing >= 0 && existing < kCorridorCount
+        if (existing >= 0 && existing < planar.corridorCount
             && !usedSlots.contains(existing)) {
             usedSlots.insert(existing);
         }
@@ -205,16 +214,14 @@ QVector<int> TreeLayoutEngine::corridorSlots(
         if (existing >= 0 && usedSlots.contains(existing))
             continue;
 
-        constexpr int primaryCorridorCount =
-            static_cast<int>(kCorridorCount / 2);
         const int preferred = static_cast<int>(
             qHash(child->path)
-            % static_cast<size_t>(primaryCorridorCount));
-        for (int distance = 0; distance < kCorridorCount; ++distance) {
-            const int layer = distance / primaryCorridorCount;
-            const int offset = distance % primaryCorridorCount;
-            const int candidate = layer * primaryCorridorCount
-                + (preferred + offset) % primaryCorridorCount;
+            % static_cast<size_t>(planar.primaryCorridorCount));
+        for (int distance = 0; distance < planar.corridorCount; ++distance) {
+            const int layer = distance / planar.primaryCorridorCount;
+            const int offset = distance % planar.primaryCorridorCount;
+            const int candidate = layer * planar.primaryCorridorCount
+                + (preferred + offset) % planar.primaryCorridorCount;
             if (usedSlots.contains(candidate))
                 continue;
             m_corridorSlots.insert(child->id, candidate);

@@ -138,10 +138,11 @@ file mutation.
 
 ### Theme data
 
-The application uses a versioned set of tokens for palette, geometry, semantic
-forms, typography, and motion timing. The first theme is Sakura Morning. C++
-scene rendering and the QML shell consume the same token source so colors and
-geometry do not drift between layers.
+The application uses immutable, statically registered theme profiles for
+palette, geometry, semantic forms, typography, camera behavior, presentation
+budgets, and motion timing. The first module is Sakura Morning. C++ scene
+rendering and the QML `Theme` facade consume the same active profile so colors,
+geometry, and behavior do not drift between layers.
 
 The theme interface must not change navigation semantics or accessibility.
 

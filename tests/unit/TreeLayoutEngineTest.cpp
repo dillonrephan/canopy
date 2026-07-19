@@ -2,6 +2,7 @@
 #include "FakeTreeData.h"
 #include "LabelVisibilityPolicy.h"
 #include "NavigationState.h"
+#include "ThemeRegistry.h"
 #include "TreeLayoutEngine.h"
 
 #include <QSet>
@@ -15,6 +16,7 @@ class TreeLayoutEngineTest final : public QObject
 
 private slots:
     void fixtureHasStableRelationships();
+    void activeThemeProfileIsComplete();
     void layoutIsDeterministic();
     void focusedDirectoryKeepsParentContext();
     void wideDirectoryUsesUniquePositions();
@@ -48,6 +50,26 @@ void TreeLayoutEngineTest::fixtureHasStableRelationships()
         if (node.parentId != InvalidNodeId)
             QVERIFY(node.path.startsWith(QStringLiteral("/home/dillon/")));
     }
+}
+
+void TreeLayoutEngineTest::activeThemeProfileIsComplete()
+{
+    const ThemeProfile &theme = ThemeRegistry::active();
+
+    QCOMPARE(theme.id, QStringLiteral("sakura-morning"));
+    QVERIFY(!theme.name.isEmpty());
+    QVERIFY(theme.palette.sceneCanvas.isValid());
+    QVERIFY(theme.palette.textDark.isValid());
+    QVERIFY(theme.palette.textLight.isValid());
+    QVERIFY(theme.branches.focusedWidth > theme.branches.directoryWidth);
+    QVERIFY(theme.camera.minimumZoom < 1.0);
+    QVERIFY(theme.camera.maximumZoom > 1.0);
+    QVERIFY(theme.camera.fogClearingZoom <= theme.camera.maximumZoom);
+    QCOMPARE(theme.planar.primaryCorridorCount,
+             theme.presentation.foregroundCorridorCount);
+    QCOMPARE(theme.planar.corridorCount,
+             theme.presentation.foregroundCorridorCount
+                 + theme.presentation.fogHintCount);
 }
 
 void TreeLayoutEngineTest::layoutIsDeterministic()

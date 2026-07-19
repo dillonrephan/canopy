@@ -40,8 +40,13 @@ qt_add_qml_module(canopy
         src/rendering/LabelVisibilityPolicy.h
         src/rendering/TreeSceneItem.cpp
         src/rendering/TreeSceneItem.h
+        src/theme/ThemeProfile.h
+        src/theme/ThemeRegistry.cpp
+        src/theme/ThemeRegistry.h
         src/theme/ThemeTokens.cpp
         src/theme/ThemeTokens.h
+        src/themes/sakura/SakuraMorningTheme.cpp
+        src/themes/sakura/SakuraMorningTheme.h
 )
 
 target_link_libraries(canopy PRIVATE
@@ -57,6 +62,7 @@ target_include_directories(canopy PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/navigation
     ${CMAKE_CURRENT_SOURCE_DIR}/src/rendering
     ${CMAKE_CURRENT_SOURCE_DIR}/src/theme
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/themes/sakura
 )
 
 include(CTest)
@@ -69,14 +75,18 @@ if(BUILD_TESTING)
         src/model/FakeTreeData.cpp
         src/navigation/NavigationState.cpp
         src/rendering/LabelVisibilityPolicy.cpp
+        src/theme/ThemeRegistry.cpp
+        src/themes/sakura/SakuraMorningTheme.cpp
     )
     target_include_directories(canopy_unit_tests PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src/layout
         ${CMAKE_CURRENT_SOURCE_DIR}/src/model
         ${CMAKE_CURRENT_SOURCE_DIR}/src/navigation
         ${CMAKE_CURRENT_SOURCE_DIR}/src/rendering
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/theme
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/themes/sakura
     )
-    target_link_libraries(canopy_unit_tests PRIVATE Qt6::Test)
+    target_link_libraries(canopy_unit_tests PRIVATE Qt6::Gui Qt6::Test)
     add_test(NAME canopy_unit_tests COMMAND canopy_unit_tests)
 
     qt_add_executable(canopy_directory_scanner_tests

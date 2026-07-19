@@ -1,12 +1,10 @@
 #include "LabelVisibilityPolicy.h"
 
+#include "ThemeRegistry.h"
+
 #include <algorithm>
 
 namespace {
-constexpr qreal kPrimaryLabelZoom = 0.72;
-constexpr qreal kDescendantLabelZoom = 1.25;
-constexpr qreal kFogClearingZoom = 3.2;
-
 struct LabelCandidate {
     const LayoutNode *node = nullptr;
     int priority = 0;
@@ -33,11 +31,12 @@ LabelCandidate candidateFor(const LayoutNode &node,
 
 bool isEligible(const LabelCandidate &candidate, qreal zoom)
 {
+    const LabelStyle &labels = ThemeRegistry::active().labels;
     if (candidate.emphasized)
         return true;
     if (candidate.priority <= 4)
-        return zoom >= kPrimaryLabelZoom;
-    return zoom >= kDescendantLabelZoom;
+        return zoom >= labels.primaryRevealZoom;
+    return zoom >= labels.descendantRevealZoom;
 }
 
 bool collidesWith(const QRectF &bounds, const QVector<QRectF> &occupied)
@@ -50,8 +49,10 @@ bool collidesWith(const QRectF &bounds, const QVector<QRectF> &occupied)
 
 qreal LabelVisibilityPolicy::depthOpacity(qreal baseOpacity, qreal zoom)
 {
+    const qreal fogClearingZoom =
+        ThemeRegistry::active().camera.fogClearingZoom;
     const qreal fogLift = qBound(
-        0.0, (zoom - 1.0) / (kFogClearingZoom - 1.0), 1.0);
+        0.0, (zoom - 1.0) / (fogClearingZoom - 1.0), 1.0);
     return baseOpacity + (1.0 - baseOpacity) * fogLift;
 }
 

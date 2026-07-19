@@ -105,7 +105,7 @@ No destructive operations.
 Work on `visual/perspective-sakura` is intentionally isolated from the planar
 corridor checkpoint.
 
-- [ ] extract the current Sakura profile without changing behavior
+- [x] extract the current Sakura profile without changing behavior
 - [ ] separate stable world layout from screen projection
 - [ ] retain the planar renderer as a reference projection
 - [ ] add perspective camera and projected hit geometry
