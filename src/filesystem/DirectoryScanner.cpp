@@ -5,25 +5,23 @@
 #include <QMimeDatabase>
 
 #include <algorithm>
+#include <utility>
 
 namespace {
+constexpr qsizetype kGrowthBatchSize = 4;
+constexpr quint64 kProgressInterval = 256;
+
 bool entryLess(const ScannedEntry &left, const ScannedEntry &right)
 {
-    if (left.kind == NodeKind::Directory && right.kind != NodeKind::Directory)
-        return true;
-    if (left.kind != NodeKind::Directory && right.kind == NodeKind::Directory)
-        return false;
-
-    const int insensitive = QString::compare(
-        left.name, right.name, Qt::CaseInsensitive);
-    return insensitive == 0 ? left.name < right.name : insensitive < 0;
+    return left.orderingKey < right.orderingKey;
 }
 }
 
 DirectoryScanResult DirectoryScanner::scan(
     const QString &path,
     qsizetype materializedEntryLimit,
-    const std::function<bool()> &shouldCancel)
+    const std::function<bool()> &shouldCancel,
+    const std::function<void(const DirectoryScanUpdate &)> &onUpdate)
 {
     DirectoryScanResult result;
     const QFileInfo directoryInfo(path);
@@ -47,6 +45,8 @@ DirectoryScanResult DirectoryScanner::scan(
 
     materializedEntryLimit = std::max<qsizetype>(1, materializedEntryLimit);
     result.entries.reserve(materializedEntryLimit);
+    QVector<ScannedEntry> pendingEntries;
+    pendingEntries.reserve(kGrowthBatchSize);
 
     QDirIterator iterator(
         result.path,
@@ -65,20 +65,32 @@ DirectoryScanResult DirectoryScanner::scan(
             continue;
 
         ++result.totalEntryCount;
-        ScannedEntry entry {
-            .name = info.fileName(),
-            .path = info.absoluteFilePath(),
-            .kind = classify(info),
-            .detail = describe(info),
-            .isSymbolicLink = info.isSymbolicLink()
-        };
+        if (result.entries.size() < materializedEntryLimit) {
+            ScannedEntry entry = makeEntry(info);
+            result.entries.append(entry);
+            pendingEntries.append(std::move(entry));
+        }
 
-        const auto position = std::lower_bound(
-            result.entries.begin(), result.entries.end(), entry, entryLess);
-        result.entries.insert(position, std::move(entry));
-        if (result.entries.size() > materializedEntryLimit)
-            result.entries.removeLast();
+        const bool batchReady = pendingEntries.size() == kGrowthBatchSize;
+        const bool progressReady = result.totalEntryCount % kProgressInterval == 0;
+        if (onUpdate && (batchReady || progressReady)) {
+            onUpdate({
+                .path = result.path,
+                .entries = std::exchange(pendingEntries, {}),
+                .discoveredEntryCount = result.totalEntryCount
+            });
+            pendingEntries.reserve(kGrowthBatchSize);
+        }
     }
+
+    if (onUpdate && !pendingEntries.isEmpty()) {
+        onUpdate({
+            .path = result.path,
+            .entries = std::move(pendingEntries),
+            .discoveredEntryCount = result.totalEntryCount
+        });
+    }
+    std::sort(result.entries.begin(), result.entries.end(), entryLess);
 
     if (result.totalEntryCount > static_cast<quint64>(result.entries.size())) {
         result.state = DirectoryLoadState::Partial;
@@ -93,6 +105,92 @@ DirectoryScanResult DirectoryScanner::scan(
             : QStringLiteral("%1 entries loaded.").arg(result.totalEntryCount);
     }
     return result;
+}
+
+DirectoryPageResult DirectoryScanner::scanPage(
+    const QString &path,
+    const QString &afterCursor,
+    qsizetype pageSize,
+    const std::function<bool()> &shouldCancel)
+{
+    DirectoryPageResult result;
+    const QFileInfo directoryInfo(path);
+    result.path = QDir::cleanPath(directoryInfo.absoluteFilePath());
+
+    if (!directoryInfo.exists()) {
+        result.state = DirectoryLoadState::Error;
+        result.status = QStringLiteral("This directory no longer exists.");
+        return result;
+    }
+    if (!directoryInfo.isDir()) {
+        result.state = DirectoryLoadState::Error;
+        result.status = QStringLiteral("This path is not a directory.");
+        return result;
+    }
+    if (!directoryInfo.isReadable()) {
+        result.state = DirectoryLoadState::Inaccessible;
+        result.status = QStringLiteral("Permission to read this directory was denied.");
+        return result;
+    }
+
+    pageSize = std::max<qsizetype>(1, pageSize);
+    result.entries.reserve(pageSize);
+    quint64 eligibleEntryCount = 0;
+    QDirIterator iterator(
+        result.path,
+        QDir::AllEntries | QDir::NoDotAndDotDot,
+        QDirIterator::NoIteratorFlags);
+    while (iterator.hasNext()) {
+        if (shouldCancel && shouldCancel()) {
+            result.cancelled = true;
+            result.status = QStringLiteral("Page load cancelled.");
+            return result;
+        }
+
+        iterator.next();
+        const QFileInfo info = iterator.fileInfo();
+        if (!info.exists() && !info.isSymbolicLink())
+            continue;
+
+        ++result.totalEntryCount;
+        ScannedEntry entry = makeEntry(info);
+        if (!afterCursor.isEmpty() && entry.orderingKey <= afterCursor)
+            continue;
+
+        ++eligibleEntryCount;
+        const auto position = std::lower_bound(
+            result.entries.begin(), result.entries.end(), entry, entryLess);
+        result.entries.insert(position, std::move(entry));
+        if (result.entries.size() > pageSize)
+            result.entries.removeLast();
+    }
+
+    result.hasNextPage =
+        eligibleEntryCount > static_cast<quint64>(result.entries.size());
+    if (!result.entries.isEmpty())
+        result.nextCursor = result.entries.last().orderingKey;
+    result.state = DirectoryLoadState::Ready;
+    result.status = result.entries.isEmpty()
+        ? QStringLiteral("No entries on this page.")
+        : QStringLiteral("%1 entries on this page.").arg(result.entries.size());
+    return result;
+}
+
+ScannedEntry DirectoryScanner::makeEntry(const QFileInfo &entry)
+{
+    const NodeKind kind = classify(entry);
+    const QString category = kind == NodeKind::Directory
+        ? QStringLiteral("0") : QStringLiteral("1");
+    const QString name = entry.fileName();
+    return {
+        .name = name,
+        .path = entry.absoluteFilePath(),
+        .orderingKey = category + QChar(0) + name.toCaseFolded()
+            + QChar(0) + name,
+        .kind = kind,
+        .detail = describe(entry),
+        .isSymbolicLink = entry.isSymbolicLink()
+    };
 }
 
 NodeKind DirectoryScanner::classify(const QFileInfo &entry)

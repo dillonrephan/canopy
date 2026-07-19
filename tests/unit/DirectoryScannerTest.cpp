@@ -15,6 +15,8 @@ class DirectoryScannerTest final : public QObject
 private slots:
     void scansClassifiesAndSortsEntries();
     void boundsMaterializedEntriesWhileCountingAll();
+    void emitsIncrementalBoundedGrowth();
+    void scansDeterministicPagesWithoutGrowingMemory();
     void reportsInvalidPathsLiterally();
     void supportsCancellation();
     void controllerDeliversOnlyTheLatestRequest();
@@ -80,9 +82,67 @@ void DirectoryScannerTest::boundsMaterializedEntriesWhileCountingAll()
     QCOMPARE(result.state, DirectoryLoadState::Partial);
     QCOMPARE(result.totalEntryCount, quint64(40));
     QCOMPARE(result.entries.size(), 10);
-    QCOMPARE(result.entries.first().name, QStringLiteral("entry-00.txt"));
-    QCOMPARE(result.entries.last().name, QStringLiteral("entry-09.txt"));
+    for (qsizetype index = 1; index < result.entries.size(); ++index) {
+        QVERIFY(result.entries.at(index - 1).orderingKey
+                < result.entries.at(index).orderingKey);
+    }
     QVERIFY(!result.status.isEmpty());
+}
+
+void DirectoryScannerTest::emitsIncrementalBoundedGrowth()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    QDir root(temporaryDirectory.path());
+    for (int index = 0; index < 23; ++index)
+        createFile(root.filePath(QStringLiteral("growth-%1").arg(index)));
+
+    QVector<DirectoryScanUpdate> updates;
+    const DirectoryScanResult result = DirectoryScanner::scan(
+        root.path(), 10, {}, [&updates](const DirectoryScanUpdate &update) {
+            updates.append(update);
+        });
+
+    QCOMPARE(result.totalEntryCount, quint64(23));
+    QCOMPARE(result.entries.size(), 10);
+    QVERIFY(updates.size() >= 3);
+    qsizetype deliveredEntries = 0;
+    quint64 previousCount = 0;
+    for (const DirectoryScanUpdate &update : updates) {
+        QVERIFY(update.entries.size() <= 4);
+        QVERIFY(update.discoveredEntryCount >= previousCount);
+        deliveredEntries += update.entries.size();
+        previousCount = update.discoveredEntryCount;
+    }
+    QCOMPARE(deliveredEntries, 10);
+}
+
+void DirectoryScannerTest::scansDeterministicPagesWithoutGrowingMemory()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    QDir root(temporaryDirectory.path());
+    for (int index = 39; index >= 0; --index) {
+        createFile(root.filePath(
+            QStringLiteral("entry-%1.txt").arg(index, 2, 10, QLatin1Char('0'))));
+    }
+
+    const DirectoryPageResult first =
+        DirectoryScanner::scanPage(root.path(), {}, 10);
+    QCOMPARE(first.state, DirectoryLoadState::Ready);
+    QCOMPARE(first.totalEntryCount, quint64(40));
+    QCOMPARE(first.entries.size(), 10);
+    QCOMPARE(first.entries.first().name, QStringLiteral("entry-00.txt"));
+    QCOMPARE(first.entries.last().name, QStringLiteral("entry-09.txt"));
+    QVERIFY(first.hasNextPage);
+
+    const DirectoryPageResult second =
+        DirectoryScanner::scanPage(root.path(), first.nextCursor, 10);
+    QCOMPARE(second.totalEntryCount, quint64(40));
+    QCOMPARE(second.entries.size(), 10);
+    QCOMPARE(second.entries.first().name, QStringLiteral("entry-10.txt"));
+    QCOMPARE(second.entries.last().name, QStringLiteral("entry-19.txt"));
+    QVERIFY(second.hasNextPage);
 }
 
 void DirectoryScannerTest::reportsInvalidPathsLiterally()
