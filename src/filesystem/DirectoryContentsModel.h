@@ -58,6 +58,8 @@ public:
     [[nodiscard]] QString rangeLabel() const;
     [[nodiscard]] QString status() const { return m_status; }
     [[nodiscard]] bool includeHidden() const noexcept { return m_includeHidden; }
+    [[nodiscard]] QString pathAt(int row) const;
+    [[nodiscard]] bool isDirectoryAt(int row) const;
 
     void setDirectory(const QString &path);
     void setIncludeHidden(bool includeHidden);

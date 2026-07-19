@@ -147,7 +147,7 @@ DirectoryPageResult DirectoryScanner::scanPage(
     quint64 eligibleEntryCount = 0;
     QDirIterator iterator(
         result.path,
-        QDir::AllEntries | QDir::NoDotAndDotDot
+        QDir::AllEntries | QDir::System | QDir::NoDotAndDotDot
             | (includeHidden
                    ? QDir::Filters(QDir::Hidden) : QDir::Filters {}),
         QDirIterator::NoIteratorFlags);

@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -5,6 +7,7 @@ import Canopy
 
 ApplicationWindow {
     id: window
+    property string initialPath: ""
     width: 1280
     height: 800
     minimumWidth: 900
@@ -101,13 +104,30 @@ ApplicationWindow {
                 }
             }
 
-            Label {
+            TextField {
+                id: addressField
                 Layout.fillWidth: true
                 text: tree.breadcrumb
+                selectByMouse: true
                 color: Theme.textDark
-                opacity: 0.76
-                elide: Text.ElideMiddle
                 font.pixelSize: 14
+                Accessible.name: "Directory path"
+                onAccepted: {
+                    if (tree.navigateToPath(text))
+                        focus = false
+                }
+                onActiveFocusChanged: {
+                    if (!activeFocus)
+                        text = tree.breadcrumb
+                }
+
+                background: Rectangle {
+                    radius: 10
+                    color: addressField.activeFocus
+                           ? Theme.raisedSurface : "transparent"
+                    border.color: addressField.activeFocus
+                                  ? Theme.selection : "transparent"
+                }
             }
 
             Label {
@@ -159,6 +179,15 @@ ApplicationWindow {
                 }
             }
 
+            Connections {
+                target: tree
+
+                function onNavigationChanged() {
+                    if (!addressField.activeFocus)
+                        addressField.text = tree.breadcrumb
+                }
+            }
+
             Rectangle {
                 anchors.left: parent.left
                 anchors.bottom: parent.bottom
@@ -172,7 +201,7 @@ ApplicationWindow {
                 Label {
                     id: instruction
                     anchors.centerIn: parent
-                    text: "Scroll to zoom  •  drag open space to pan  •  click to inspect  •  double-click a branch to focus"
+                    text: "Scroll to zoom  •  drag to pan  •  click to inspect  •  double-click to enter or open"
                     color: Theme.textDark
                     opacity: 0.78
                     font.pixelSize: 12
@@ -391,8 +420,14 @@ ApplicationWindow {
                                     width: ListView.view.width
                                     height: 42
                                     radius: 5
-                                    color: index % 2 === 0
-                                           ? Theme.raisedSurface : "transparent"
+                                    color: contentsHover.hovered
+                                           ? Theme.shellSurface
+                                           : index % 2 === 0
+                                             ? Theme.raisedSurface : "transparent"
+                                    Accessible.name: contentsDelegate.entryName
+                                    Accessible.description:
+                                        contentsDelegate.entryDetail
+                                    Accessible.role: Accessible.ListItem
 
                                     RowLayout {
                                         anchors.fill: parent
@@ -428,6 +463,17 @@ ApplicationWindow {
                                             opacity: 0.52
                                             font.pixelSize: 9
                                         }
+                                    }
+
+                                    HoverHandler {
+                                        id: contentsHover
+                                    }
+
+                                    TapHandler {
+                                        acceptedButtons: Qt.LeftButton
+                                        onDoubleTapped:
+                                            tree.activateContentsRow(
+                                                contentsDelegate.index)
                                     }
                                 }
                             }
@@ -500,13 +546,51 @@ ApplicationWindow {
                             Label {
                                 Layout.fillWidth: true
                                 visible: tree.selectedRequiresContents
-                                text: "Pages stay memory-bounded. Hidden entries are not shown yet."
+                                text: tree.showHidden
+                                      ? "Pages stay memory-bounded. Hidden entries are included."
+                                      : "Pages stay memory-bounded. Hidden entries are excluded."
                                 color: Theme.textDark
                                 opacity: 0.62
                                 font.pixelSize: 10
                                 wrapMode: Text.Wrap
                             }
                         }
+                    }
+                }
+
+                CheckBox {
+                    id: showHidden
+                    text: "Show hidden entries"
+                    checked: tree.showHidden
+                    onToggled: tree.showHidden = checked
+
+                    indicator: Rectangle {
+                        implicitWidth: 20
+                        implicitHeight: 20
+                        x: showHidden.leftPadding
+                        y: (showHidden.height - height) / 2
+                        radius: 6
+                        color: showHidden.checked ? Theme.selection
+                                                  : Theme.raisedSurface
+                        border.color: showHidden.hovered ? Theme.selection
+                                                         : Theme.border
+
+                        Label {
+                            anchors.centerIn: parent
+                            visible: showHidden.checked
+                            text: "✓"
+                            color: Theme.textLight
+                            font.bold: true
+                            font.pixelSize: 13
+                        }
+                    }
+
+                    contentItem: Label {
+                        text: showHidden.text
+                        color: Theme.textDark
+                        leftPadding: showHidden.indicator.width
+                                     + showHidden.spacing
+                        verticalAlignment: Text.AlignVCenter
                     }
                 }
 
@@ -547,6 +631,15 @@ ApplicationWindow {
 
                 Label {
                     Layout.fillWidth: true
+                    visible: tree.pathMessage.length > 0
+                    text: tree.pathMessage
+                    color: Theme.selection
+                    font.pixelSize: 11
+                    wrapMode: Text.Wrap
+                }
+
+                Label {
+                    Layout.fillWidth: true
                     text: "Read-only filesystem view — Canopy never changes files."
                     color: Theme.textDark
                     opacity: 0.58
@@ -554,6 +647,14 @@ ApplicationWindow {
                     wrapMode: Text.Wrap
                 }
             }
+        }
+    }
+
+    Shortcut {
+        sequence: "Ctrl+L"
+        onActivated: {
+            addressField.forceActiveFocus()
+            addressField.selectAll()
         }
     }
 
@@ -567,5 +668,10 @@ ApplicationWindow {
         sequence: "Alt+Up"
         enabled: tree.canGoUp
         onActivated: tree.goUp()
+    }
+
+    Component.onCompleted: {
+        if (initialPath.length > 0)
+            tree.navigateToPath(initialPath)
     }
 }

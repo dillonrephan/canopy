@@ -6,6 +6,8 @@
 
 #include <QColor>
 #include <QCursor>
+#include <QDesktopServices>
+#include <QDir>
 #include <QEasingCurve>
 #include <QHoverEvent>
 #include <QLineF>
@@ -14,6 +16,7 @@
 #include <QPainterPath>
 #include <QPainterPathStroker>
 #include <QWheelEvent>
+#include <QUrl>
 #include <QtMath>
 
 namespace {
@@ -280,6 +283,14 @@ void TreeSceneItem::setReducedMotion(bool reducedMotion)
     emit reducedMotionChanged();
 }
 
+void TreeSceneItem::setShowHidden(bool showHidden)
+{
+    if (m_filesystemModel.includeHidden() == showHidden)
+        return;
+    m_filesystemModel.setIncludeHidden(showHidden);
+    emit showHiddenChanged();
+}
+
 void TreeSceneItem::resetView()
 {
     m_pan = QPointF(120.0, 35.0);
@@ -306,6 +317,47 @@ void TreeSceneItem::goUp()
 void TreeSceneItem::focusSelected()
 {
     focusNode(m_navigation.selectedId(), true);
+}
+
+bool TreeSceneItem::navigateToPath(const QString &path)
+{
+    QString requestedPath = path.trimmed();
+    if (requestedPath == QStringLiteral("~")) {
+        requestedPath = QDir::homePath();
+    } else if (requestedPath.startsWith(QStringLiteral("~/"))) {
+        requestedPath = QDir::home().filePath(requestedPath.sliced(2));
+    } else if (QDir::isRelativePath(requestedPath)) {
+        requestedPath = QDir(breadcrumb()).absoluteFilePath(requestedPath);
+    }
+
+    QString errorMessage;
+    const NodeId id =
+        m_filesystemModel.ensureDirectory(requestedPath, &errorMessage);
+    if (id == InvalidNodeId) {
+        setPathMessage(errorMessage);
+        return false;
+    }
+
+    setPathMessage(QString());
+    if (id == m_navigation.focusedId()) {
+        m_filesystemModel.setActiveDirectory(id);
+        m_filesystemModel.setContentsDirectory(id);
+        return true;
+    }
+    focusNode(id, true);
+    return true;
+}
+
+void TreeSceneItem::activateContentsRow(int row)
+{
+    DirectoryContentsModel *contents = m_filesystemModel.contentsModel();
+    const QString path = contents->pathAt(row);
+    if (path.isEmpty())
+        return;
+    if (contents->isDirectoryAt(row))
+        navigateToPath(path);
+    else
+        openFile(path);
 }
 
 void TreeSceneItem::hoverMoveEvent(QHoverEvent *event)
@@ -341,7 +393,11 @@ void TreeSceneItem::mouseDoubleClickEvent(QMouseEvent *event)
     const NodeId hit = nodeAt(event->position());
     if (hit != InvalidNodeId) {
         selectNode(hit);
-        focusNode(hit, true);
+        const FileNode *entry = node(hit);
+        if (entry && entry->isDirectory())
+            focusNode(hit, true);
+        else if (entry)
+            openFile(entry->path);
     }
     event->accept();
 }
@@ -508,6 +564,22 @@ void TreeSceneItem::focusNode(NodeId id, bool addToHistory)
     emit selectionChanged();
     emit navigationChanged();
     m_filesystemModel.setActiveDirectory(id);
+}
+
+void TreeSceneItem::openFile(const QString &path)
+{
+    if (QDesktopServices::openUrl(QUrl::fromLocalFile(path)))
+        setPathMessage(QString());
+    else
+        setPathMessage(QStringLiteral("No application could open this file."));
+}
+
+void TreeSceneItem::setPathMessage(const QString &message)
+{
+    if (m_pathMessage == message)
+        return;
+    m_pathMessage = message;
+    emit pathMessageChanged();
 }
 
 void TreeSceneItem::relayout()

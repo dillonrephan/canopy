@@ -36,6 +36,8 @@ class TreeSceneItem : public QQuickPaintedItem
     Q_PROPERTY(bool canGoBack READ canGoBack NOTIFY navigationChanged)
     Q_PROPERTY(bool canGoUp READ canGoUp NOTIFY navigationChanged)
     Q_PROPERTY(bool reducedMotion READ reducedMotion WRITE setReducedMotion NOTIFY reducedMotionChanged)
+    Q_PROPERTY(bool showHidden READ showHidden WRITE setShowHidden NOTIFY showHiddenChanged)
+    Q_PROPERTY(QString pathMessage READ pathMessage NOTIFY pathMessageChanged)
 
 public:
     explicit TreeSceneItem(QQuickItem *parent = nullptr);
@@ -62,17 +64,27 @@ public:
     [[nodiscard]] bool canGoUp() const;
     [[nodiscard]] bool reducedMotion() const noexcept { return m_reducedMotion; }
     void setReducedMotion(bool reducedMotion);
+    [[nodiscard]] bool showHidden() const noexcept
+    {
+        return m_filesystemModel.includeHidden();
+    }
+    void setShowHidden(bool showHidden);
+    [[nodiscard]] QString pathMessage() const { return m_pathMessage; }
 
     Q_INVOKABLE void resetView();
     Q_INVOKABLE void goBack();
     Q_INVOKABLE void goUp();
     Q_INVOKABLE void focusSelected();
+    Q_INVOKABLE bool navigateToPath(const QString &path);
+    Q_INVOKABLE void activateContentsRow(int row);
 
 signals:
     void selectionChanged();
     void navigationChanged();
     void cameraChanged();
     void reducedMotionChanged();
+    void showHiddenChanged();
+    void pathMessageChanged();
 
 protected:
     void hoverMoveEvent(QHoverEvent *event) override;
@@ -94,6 +106,8 @@ private:
     [[nodiscard]] QColor kindColor(NodeKind kind) const;
     void selectNode(NodeId id);
     void focusNode(NodeId id, bool addToHistory);
+    void openFile(const QString &path);
+    void setPathMessage(const QString &message);
     void relayout();
 
     FilesystemTreeModel m_filesystemModel;
@@ -104,6 +118,7 @@ private:
     QVariantAnimation m_focusAnimation;
     QPointF m_pan {120.0, 35.0};
     QPointF m_lastPointer;
+    QString m_pathMessage;
     qreal m_zoom = 1.0;
     qreal m_transitionProgress = 1.0;
     NodeId m_hovered = InvalidNodeId;

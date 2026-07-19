@@ -48,6 +48,18 @@ QHash<int, QByteArray> DirectoryContentsModel::roleNames() const
     };
 }
 
+QString DirectoryContentsModel::pathAt(int row) const
+{
+    return row >= 0 && row < m_entries.size()
+        ? m_entries.at(row).path : QString();
+}
+
+bool DirectoryContentsModel::isDirectoryAt(int row) const
+{
+    return row >= 0 && row < m_entries.size()
+        && m_entries.at(row).kind == NodeKind::Directory;
+}
+
 QString DirectoryContentsModel::rangeLabel() const
 {
     if (m_loading)
