@@ -37,6 +37,10 @@ This removes a fixed directory-size ceiling while keeping memory proportional to
 one page. Each page currently performs a fresh background enumeration; indexing
 or durable scan snapshots can optimize that cost later.
 
+Hidden visibility is one shared scan option. Toggling it restarts both the active
+tree scan and current page under cancellation, while an explicitly typed hidden
+directory remains directly reachable regardless of discovery visibility.
+
 ## Error semantics
 
 Size alone is never an error. Loading, partial results, permission denial, scan

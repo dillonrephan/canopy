@@ -28,6 +28,9 @@ slice:
 - asynchronous, cancellable scanning with incremental branch growth
 - live create, rename, and delete updates for active/inspected directories
 - one-directory-at-a-time navigation with no recursive crawl
+- editable direct paths, including explicitly entered hidden directories
+- a shared hidden-entry toggle for tree discovery and Contents pages
+- directory activation and default-application file opening
 - 16-entry tree materialization and 64-entry paged Contents
 - explicit loading, partial, inaccessible, and error states
 - extension-based MIME classification without reading file contents
@@ -39,10 +42,10 @@ slice:
 - a practical metadata inspector
 - deterministic fake fixtures retained for layout and stress tests
 
-Hidden files, thumbnails, opening files, filesystem mutation, Garden View,
-packaging, and broad theme customization remain outside this checkpoint.
-Contents pages are cursor-based and memory-bounded, though each alphabetically
-sorted page currently requires a fresh background enumeration.
+Thumbnails, filesystem mutation, Garden View, packaging, and broad theme
+customization remain outside this checkpoint. Contents pages are cursor-based
+and memory-bounded, though each alphabetically sorted page currently requires a
+fresh background enumeration.
 
 ## Technology direction
 
@@ -97,6 +100,12 @@ Run from a graphical desktop session:
 toolbox run --container canopy-dev ./build-toolbox/canopy
 ```
 
+Pass an optional directory to open it directly:
+
+```bash
+toolbox run --container canopy-dev ./build-toolbox/canopy ~/.config
+```
+
 Static-check the QML:
 
 ```bash
@@ -107,9 +116,10 @@ toolbox run --container canopy-dev \
 ## Safety boundary
 
 Canopy reads real directory metadata but has no code path for changing files.
-Later destructive features must default to trash, require explicit confirmation
-for permanent deletion, report partial failures honestly, and never silently
-overwrite files.
+Opening a file delegates it to the system's default application, which may offer
+its own editing behavior. Later destructive features inside Canopy must default
+to trash, require explicit confirmation for permanent deletion, report partial
+failures honestly, and never silently overwrite files.
 
 ## License
 

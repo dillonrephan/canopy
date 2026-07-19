@@ -69,8 +69,9 @@ Gate: do not proceed until the visual tree is useful rather than merely novel.
 - [x] explicit symlink, inaccessible-path, and scan-error metadata
 - [x] incremental result delivery and paged Contents loading
 - [x] shared observable model with live create, rename, and delete updates
-- hidden-file toggle
-- default-application opening
+- [x] hidden-file toggle shared across tree, pages, and live refresh
+- [x] editable/startup path navigation, including hidden paths
+- [x] default-application opening
 - thumbnails and previews
 - favorites, recent places, and removable drives
 - structured logging and visible errors

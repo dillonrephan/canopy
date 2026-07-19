@@ -16,7 +16,7 @@ creating a renderer or data model that must immediately be discarded.
 QML owns window composition and ordinary interface controls:
 
 - navigation controls
-- breadcrumbs
+- editable path/breadcrumb navigation
 - inspector
 - status and error presentation
 - reduced-motion preference
@@ -62,8 +62,11 @@ currently enumerates the directory on a worker thread to find the next bounded
 sorted page; a future indexed backend may optimize repeated enumeration without
 changing the model boundary.
 
-Hidden entries are excluded at this checkpoint. Symbolic links are identified
-literally and are never followed automatically by the scanner.
+Hidden entries are excluded by default. Symbolic links are identified
+literally and are never followed automatically by the scanner. The visibility
+option is shared by incremental tree scans, Contents pages, and live refreshes.
+An explicitly entered hidden directory remains resolvable even while discovery
+of hidden entries is disabled.
 
 ### Layout engine
 
@@ -107,6 +110,12 @@ QML overlays remain appropriate for conventional controls and the inspector.
 A small controller owns the focused node, back/forward history, parent
 navigation, current selection, pan/zoom state, and reduced-motion behavior. It
 coordinates model, layout, and UI without absorbing their responsibilities.
+
+Direct paths resolve to semantic directory nodes before focus changes, including
+nodes outside the currently materialized sample. Directory rows and branches
+use that same path. File activation bypasses the directory model and delegates a
+local-file URL to the desktop's default application; Canopy itself performs no
+file mutation.
 
 ### Theme data
 
