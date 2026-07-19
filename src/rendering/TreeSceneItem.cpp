@@ -6,9 +6,7 @@
 
 #include <QColor>
 #include <QCursor>
-#include <QDir>
 #include <QEasingCurve>
-#include <QFileInfo>
 #include <QHoverEvent>
 #include <QLineF>
 #include <QMouseEvent>
@@ -18,8 +16,6 @@
 #include <QWheelEvent>
 #include <QtMath>
 
-#include <algorithm>
-
 namespace {
 constexpr qreal kMinZoom = 0.48;
 constexpr qreal kMaxZoom = 2.4;
@@ -28,19 +24,6 @@ constexpr qreal kMaxZoom = 2.4;
 TreeSceneItem::TreeSceneItem(QQuickItem *parent)
     : QQuickPaintedItem(parent)
 {
-    const QString homePath = QDir::cleanPath(QDir::homePath());
-    const QString homeName = QFileInfo(homePath).fileName();
-    m_nodes.append({
-        .id = 1,
-        .parentId = InvalidNodeId,
-        .name = homeName.isEmpty() ? QStringLiteral("Home") : homeName,
-        .path = homePath,
-        .kind = NodeKind::Directory,
-        .detail = QStringLiteral("Read-only home directory"),
-        .directoryState = DirectoryLoadState::Loading,
-        .directoryStatus = QStringLiteral("Reading directory contents…")
-    });
-
     setAcceptedMouseButtons(Qt::LeftButton | Qt::MiddleButton);
     setAcceptHoverEvents(true);
     setAntialiasing(true);
@@ -59,33 +42,20 @@ TreeSceneItem::TreeSceneItem(QQuickItem *parent)
         m_previousPositions.clear();
         update();
     });
-    connect(&m_scanController, &DirectoryScanController::scanFinished,
-            this, [this](quint64 requestId, const DirectoryScanResult &result) {
-                if (requestId != m_activeScanRequest
-                    || m_scanningNodeId == InvalidNodeId) {
-                    return;
-                }
-                const NodeId scannedNodeId = m_scanningNodeId;
-                m_scanningNodeId = InvalidNodeId;
-                applyScanResult(scannedNodeId, result);
-            });
-    connect(&m_scanController, &DirectoryScanController::scanUpdated,
-            this, [this](quint64 requestId, const DirectoryScanUpdate &scanUpdate) {
-                if (requestId != m_activeScanRequest
-                    || m_scanningNodeId == InvalidNodeId) {
-                    return;
-                }
-                applyScanUpdate(m_scanningNodeId, scanUpdate);
+    connect(&m_filesystemModel, &FilesystemTreeModel::treeChanged,
+            this, [this] {
+                relayout();
+                emit selectionChanged();
             });
     connect(this, &TreeSceneItem::selectionChanged, this, [this] {
         const FileNode *selected = node(m_navigation.selectedId());
-        m_contentsModel.setDirectory(
-            selected && selected->isDirectory() ? selected->path : QString());
+        m_filesystemModel.setContentsDirectory(
+            selected && selected->isDirectory()
+                ? selected->id : InvalidNodeId);
     });
 
     relayout();
-    m_contentsModel.setDirectory(homePath);
-    scanDirectory(1);
+    m_filesystemModel.setContentsDirectory(m_filesystemModel.rootId());
 }
 
 void TreeSceneItem::paint(QPainter *painter)
@@ -440,20 +410,7 @@ NodeId TreeSceneItem::nodeAt(const QPointF &viewPosition) const
 
 const FileNode *TreeSceneItem::node(NodeId id) const
 {
-    for (const FileNode &entry : m_nodes) {
-        if (entry.id == id)
-            return &entry;
-    }
-    return nullptr;
-}
-
-FileNode *TreeSceneItem::mutableNode(NodeId id)
-{
-    for (FileNode &entry : m_nodes) {
-        if (entry.id == id)
-            return &entry;
-    }
-    return nullptr;
+    return m_filesystemModel.node(id);
 }
 
 const LayoutNode *TreeSceneItem::layoutNode(NodeId id) const
@@ -550,129 +507,13 @@ void TreeSceneItem::focusNode(NodeId id, bool addToHistory)
 
     emit selectionChanged();
     emit navigationChanged();
-
-    if (target->directoryState == DirectoryLoadState::Unloaded)
-        scanDirectory(id);
-}
-
-void TreeSceneItem::scanDirectory(NodeId id)
-{
-    FileNode *directory = mutableNode(id);
-    if (!directory || !directory->isDirectory())
-        return;
-
-    if (m_scanningNodeId != InvalidNodeId && m_scanningNodeId != id) {
-        if (FileNode *stale = mutableNode(m_scanningNodeId);
-            stale && stale->directoryState == DirectoryLoadState::Loading) {
-            stale->directoryState = DirectoryLoadState::Unloaded;
-            stale->directoryStatus = QStringLiteral("Open this branch to scan it.");
-        }
-        m_scanController.cancel();
-    }
-
-    directory->directoryState = DirectoryLoadState::Loading;
-    directory->directoryStatus = QStringLiteral("Reading directory contents…");
-    m_scanningNodeId = id;
-    m_activeScanRequest = m_scanController.requestScan(
-        directory->path, DirectoryPresentationPolicy::VisualChildLimit);
-    emit selectionChanged();
-    update();
-}
-
-void TreeSceneItem::applyScanUpdate(
-    NodeId id, const DirectoryScanUpdate &scanUpdate)
-{
-    FileNode *directory = mutableNode(id);
-    if (!directory)
-        return;
-
-    directory->totalChildCount = scanUpdate.discoveredEntryCount;
-    directory->directoryState = DirectoryLoadState::Loading;
-    directory->directoryStatus = QStringLiteral("Discovered at least %1 entries…")
-                                     .arg(scanUpdate.discoveredEntryCount);
-    appendScannedEntries(id, scanUpdate.entries);
-    relayout();
-    emit selectionChanged();
-}
-
-void TreeSceneItem::applyScanResult(
-    NodeId id, const DirectoryScanResult &result)
-{
-    FileNode *directory = mutableNode(id);
-    if (!directory)
-        return;
-
-    directory->children.clear();
-    directory->totalChildCount = result.totalEntryCount;
-    directory->directoryState = result.state;
-    directory->directoryStatus = result.status;
-
-    appendScannedEntries(id, result.entries);
-    relayout();
-    emit selectionChanged();
-}
-
-void TreeSceneItem::appendScannedEntries(
-    NodeId id, const QVector<ScannedEntry> &entries)
-{
-    FileNode *directory = mutableNode(id);
-    if (!directory)
-        return;
-
-    for (const ScannedEntry &entry : entries) {
-        const auto existing = std::find_if(
-            m_nodes.begin(), m_nodes.end(), [&entry](const FileNode &candidate) {
-                return candidate.path == entry.path;
-            });
-        NodeId childId = InvalidNodeId;
-        if (existing != m_nodes.end()) {
-            childId = existing->id;
-            existing->parentId = id;
-            existing->name = entry.name;
-            existing->kind = entry.kind;
-            existing->detail = entry.detail;
-            existing->isSymbolicLink = entry.isSymbolicLink;
-        } else {
-            childId = m_nextNodeId++;
-            m_nodes.append({
-                .id = childId,
-                .parentId = id,
-                .name = entry.name,
-                .path = entry.path,
-                .kind = entry.kind,
-                .detail = entry.detail,
-                .directoryState = entry.kind == NodeKind::Directory
-                    ? DirectoryLoadState::Unloaded : DirectoryLoadState::Ready,
-                .directoryStatus = entry.kind == NodeKind::Directory
-                    ? QStringLiteral("Open this branch to scan it.") : QString(),
-                .isSymbolicLink = entry.isSymbolicLink
-            });
-        }
-        directory = mutableNode(id);
-        if (!directory->children.contains(childId))
-            directory->children.append(childId);
-    }
-
-    directory = mutableNode(id);
-    std::sort(
-        directory->children.begin(), directory->children.end(),
-        [this](NodeId leftId, NodeId rightId) {
-            const FileNode *left = node(leftId);
-            const FileNode *right = node(rightId);
-            if (!left || !right)
-                return leftId < rightId;
-            if (left->isDirectory() != right->isDirectory())
-                return left->isDirectory();
-            const int insensitive = QString::compare(
-                left->name, right->name, Qt::CaseInsensitive);
-            return insensitive == 0 ? left->name < right->name
-                                    : insensitive < 0;
-        });
+    m_filesystemModel.setActiveDirectory(id);
 }
 
 void TreeSceneItem::relayout()
 {
-    m_layout = m_layoutEngine.layout(m_nodes, m_navigation.focusedId());
+    m_layout = m_layoutEngine.layout(
+        m_filesystemModel.nodes(), m_navigation.focusedId());
     m_hovered = InvalidNodeId;
     update();
 }
