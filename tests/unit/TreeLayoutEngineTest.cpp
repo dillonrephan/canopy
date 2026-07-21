@@ -5,6 +5,7 @@
 #include "PerspectiveCameraPolicy.h"
 #include "PerspectivePresentationPolicy.h"
 #include "PerspectiveProjection.h"
+#include "ProjectedSurfaceGeometry.h"
 #include "ThemeRegistry.h"
 #include "TreeLayoutEngine.h"
 #include "WorldLayoutEngine.h"
@@ -169,6 +170,7 @@ private slots:
     void perspectiveProjectionTracksViewport();
     void perspectiveProjectionBuildsTaperedSurfaces();
     void perspectiveHitGeometryContainsPaintedSurfaces();
+    void perspectiveSurfaceInterpolationKeepsPaintAndHitTogether();
     void layoutIsDeterministic();
     void focusedDirectoryKeepsParentContext();
     void wideDirectoryUsesUniquePositions();
@@ -1243,6 +1245,50 @@ void TreeLayoutEngineTest::perspectiveHitGeometryContainsPaintedSurfaces()
         QVERIFY(!node.hitArea.contains(
             midpoint + QPointF(500.0, 500.0)));
     }
+}
+
+void TreeLayoutEngineTest::perspectiveSurfaceInterpolationKeepsPaintAndHitTogether()
+{
+    const PerspectiveProjection projection;
+    const QVector<FileNode> nodes = perspectiveNodes(4);
+    const WorldLayout world = perspectiveWorld(4);
+    const QVector<ProjectedNode> initial = projection.project(
+        world, nodes, perspectiveView());
+    const QVector<ProjectedNode> traveled = projection.project(
+        world, nodes, perspectiveView(0.75));
+    const ProjectedNode *from = projectedNode(initial, 2);
+    const ProjectedNode *to = projectedNode(traveled, 2);
+    QVERIFY(from);
+    QVERIFY(to);
+    const qreal hitPadding =
+        ThemeRegistry::active().perspective.hitPadding;
+
+    const ProjectedNode start = ProjectedSurfaceGeometry::interpolate(
+        *from, *to, -1.0, hitPadding);
+    const ProjectedNode middle = ProjectedSurfaceGeometry::interpolate(
+        *from, *to, 0.5, hitPadding);
+    const ProjectedNode finish = ProjectedSurfaceGeometry::interpolate(
+        *from, *to, 2.0, hitPadding);
+
+    QCOMPARE(start.position, from->position);
+    QCOMPARE(start.branchSurface, from->branchSurface);
+    QCOMPARE(start.hitArea, from->hitArea);
+    QCOMPARE(finish.position, to->position);
+    QCOMPARE(finish.branchSurface, to->branchSurface);
+    QCOMPARE(finish.hitArea, to->hitArea);
+    QCOMPARE(middle.position, (from->position + to->position) * 0.5);
+    QCOMPARE(middle.branchStart,
+             (from->branchStart + to->branchStart) * 0.5);
+    QVERIFY(qIsFinite(middle.position.x()));
+    QVERIFY(qIsFinite(middle.position.y()));
+    QVERIFY(!middle.branchSurface.isEmpty());
+    QVERIFY(!middle.hitArea.isEmpty());
+    QVERIFY(middle.branchSurface.subtracted(middle.hitArea).isEmpty());
+    QVERIFY(middle.hitArea.boundingRect().contains(
+        middle.branchSurface.boundingRect()));
+    QVERIFY(!middle.hitArea.contains(
+        middle.branchSurface.boundingRect().center()
+            + QPointF(500.0, 500.0)));
 }
 
 void TreeLayoutEngineTest::layoutIsDeterministic()

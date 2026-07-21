@@ -31,6 +31,8 @@ qt_add_qml_module(canopy
         src/layout/PerspectiveCameraPolicy.h
         src/layout/PerspectivePresentationPolicy.cpp
         src/layout/PerspectivePresentationPolicy.h
+        src/layout/ProjectedSurfaceGeometry.cpp
+        src/layout/ProjectedSurfaceGeometry.h
         src/layout/ProjectedNode.h
         src/layout/ViewState.h
         src/layout/WorldLayout.h
@@ -88,6 +90,7 @@ if(BUILD_TESTING)
         src/layout/PerspectiveProjection.cpp
         src/layout/PerspectiveCameraPolicy.cpp
         src/layout/PerspectivePresentationPolicy.cpp
+        src/layout/ProjectedSurfaceGeometry.cpp
         src/layout/WorldLayoutEngine.cpp
         src/model/DirectoryPresentationPolicy.cpp
         src/model/FakeTreeData.cpp
@@ -135,6 +138,7 @@ if(BUILD_TESTING)
         src/layout/PerspectiveProjection.cpp
         src/layout/PerspectiveCameraPolicy.cpp
         src/layout/PerspectivePresentationPolicy.cpp
+        src/layout/ProjectedSurfaceGeometry.cpp
         src/layout/WorldLayoutEngine.cpp
         src/filesystem/DirectoryContentsModel.cpp
         src/filesystem/DirectoryScanController.cpp

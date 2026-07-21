@@ -1,10 +1,10 @@
 #include "PerspectiveProjection.h"
 
 #include "PerspectivePresentationPolicy.h"
+#include "ProjectedSurfaceGeometry.h"
 #include "ThemeRegistry.h"
 
 #include <QHash>
-#include <QPainterPathStroker>
 #include <QSet>
 #include <QtMath>
 
@@ -29,54 +29,6 @@ void setBranchGeometry(ProjectedNode &node)
     const QPointF delta = node.position - node.branchStart;
     node.branchControl1 = node.branchStart + delta * 0.34;
     node.branchControl2 = node.branchStart + delta * 0.72;
-}
-
-QPainterPath taperedSurface(
-    const ProjectedNode &node,
-    qreal startWidth,
-    qreal endWidth)
-{
-    const QPointF delta = node.position - node.branchStart;
-    const qreal length =
-        qSqrt(delta.x() * delta.x() + delta.y() * delta.y());
-    if (length <= 0.001) {
-        QPainterPath dot;
-        const qreal radius = qMax(startWidth, endWidth) * 0.5;
-        dot.addEllipse(node.position, radius, radius);
-        return dot;
-    }
-
-    const QPointF normal(-delta.y() / length, delta.x() / length);
-    const qreal startHalf = startWidth * 0.5;
-    const qreal endHalf = endWidth * 0.5;
-    const qreal control1Half =
-        startHalf + (endHalf - startHalf) * 0.34;
-    const qreal control2Half =
-        startHalf + (endHalf - startHalf) * 0.72;
-
-    QPainterPath surface;
-    surface.moveTo(node.branchStart + normal * startHalf);
-    surface.cubicTo(
-        node.branchControl1 + normal * control1Half,
-        node.branchControl2 + normal * control2Half,
-        node.position + normal * endHalf);
-    surface.lineTo(node.position - normal * endHalf);
-    surface.cubicTo(
-        node.branchControl2 - normal * control2Half,
-        node.branchControl1 - normal * control1Half,
-        node.branchStart - normal * startHalf);
-    surface.closeSubpath();
-    return surface;
-}
-
-QPainterPath paddedHitArea(
-    const QPainterPath &surface, qreal padding)
-{
-    QPainterPathStroker stroker;
-    stroker.setWidth(padding * 2.0);
-    stroker.setCapStyle(Qt::RoundCap);
-    stroker.setJoinStyle(Qt::RoundJoin);
-    return surface.united(stroker.createStroke(surface));
 }
 
 qreal laneLateralPosition(int lane, qreal spacing)
@@ -253,10 +205,8 @@ QVector<ProjectedNode> PerspectiveProjection::project(
             ? profile.focusedTrunkFarWidth * projected.scale
             : corridorWidth * profile.corridorTipRatio
                 * projected.scale;
-        node.branchSurface = taperedSurface(
-            node, node.branchStartWidth, node.branchEndWidth);
-        node.hitArea = paddedHitArea(
-            node.branchSurface, profile.hitPadding);
+        ProjectedSurfaceGeometry::rebuild(
+            node, profile.hitPadding);
         result.append(node);
     }
 

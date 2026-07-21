@@ -21,6 +21,7 @@ private slots:
     void liveRemovalClampsRangeAndDepth();
     void emptyDirectoryTravelIsSignalFree();
     void offscreenPaintTracksTravelAndResetState();
+    void perspectiveFocusTransitionPaintsIntermediateSurface();
     void planarReducedMotionSnapsCameraWithOneSignal();
     void removedDepartureSnapshotPaintsWithoutHitTarget();
     void removedHistoryEntryIsReconciledBeforeNavigationSignal();
@@ -286,6 +287,35 @@ void TreeSceneItemTest::offscreenPaintTracksTravelAndResetState()
     scene.setReducedMotion(true);
     QCOMPARE(scene.travelDepth(), qreal(0.5));
     QCOMPARE(renderScene(scene), directReducedMotionSnap);
+}
+
+void TreeSceneItemTest::perspectiveFocusTransitionPaintsIntermediateSurface()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    const QDir root(temporaryDirectory.path());
+    makeDirectory(root, QStringLiteral("Branch"));
+    makeDirectory(root, QStringLiteral("Sibling"));
+    const QDir branch(root.filePath(QStringLiteral("Branch")));
+    makeDirectory(branch, QStringLiteral("Nested A"));
+    makeDirectory(branch, QStringLiteral("Nested B"));
+
+    TreeSceneItem scene(temporaryDirectory.path());
+    scene.setSize({1000.0, 800.0});
+    QTRY_COMPARE_WITH_TIMEOUT(
+        scene.selectedMaterializedChildCount(), qulonglong(2), 5000);
+
+    QVERIFY(scene.navigateToPath(branch.path()));
+    const QImage start = renderScene(scene);
+    const int duration = ThemeRegistry::active().motion.focusDuration;
+    QTest::qWait(qMax(1, duration / 2));
+    const QImage middle = renderScene(scene);
+    QTest::qWait(duration + 50);
+    const QImage finish = renderScene(scene);
+
+    QVERIFY(changedPixelCount(start, finish) > 1000);
+    QVERIFY(changedPixelCount(start, middle) > 100);
+    QVERIFY(changedPixelCount(middle, finish) > 100);
 }
 
 void TreeSceneItemTest::planarReducedMotionSnapsCameraWithOneSignal()

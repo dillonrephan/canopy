@@ -135,8 +135,10 @@ Each numbered stage should be a coherent, buildable commit:
 6. **Complete:** Render tapered trunk and corridor surfaces. Perspective output
    is viewport-space, paints far-to-near, and uses matching near-to-far hit
    geometry after a higher-priority visible-label/endpoint pass. Focus/live
-   geometry switches atomically with opacity-only arrival at this stage so
-   animated paint and hit endpoints cannot diverge.
+   geometry initially switched atomically with opacity-only arrival so animated
+   paint and hit endpoints could not diverge. Stage 9 now interpolates surviving
+   projected surfaces while deriving paint and hit geometry from the same
+   bounded resolved layout; arrivals and departures remain opacity-only.
 7. **Complete:** Enforce a camera-ahead window of six foreground direct-child
    corridors plus two hittable fog hints. Perspective descendants are omitted,
    root/non-root scene cardinality is strictly bounded, reversal restores exact
@@ -149,7 +151,10 @@ Each numbered stage should be a coherent, buildable commit:
    pan/zoom. Focus resets to baseline, live changes preserve and clamp the
    current view, and reduced motion snaps to the pending target.
 9. Test live additions, removals, focus transitions, reduced motion, crowded
-   directories, and backtracking under both projections.
+   directories, and backtracking under both projections. Surviving focus/live
+   nodes now interpolate from captured visible geometry, including interrupted
+   transitions, while a shared pure geometry builder regenerates each tapered
+   surface and its padded hit area together.
 10. Decide whether Sakura Perspective replaces Sakura Morning or remains a
     separate selectable profile.
 

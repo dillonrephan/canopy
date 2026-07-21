@@ -3,6 +3,7 @@
 #include "DirectoryPresentationPolicy.h"
 #include "LabelVisibilityPolicy.h"
 #include "PerspectivePresentationPolicy.h"
+#include "ProjectedSurfaceGeometry.h"
 #include "ThemeRegistry.h"
 
 #include <QColor>
@@ -19,6 +20,8 @@
 #include <QWheelEvent>
 #include <QUrl>
 #include <QtMath>
+
+#include <algorithm>
 
 namespace {
 QPainterPath staticBranchPath(const LayoutNode &layout)
@@ -69,6 +72,7 @@ TreeSceneItem::TreeSceneItem(
     connect(&m_focusAnimation, &QVariantAnimation::finished, this, [this] {
         m_transitionProgress = 1.0;
         m_previousPositions.clear();
+        m_previousProjectedLayout.clear();
         m_enteringNodes.clear();
         m_departingLayout.clear();
         update();
@@ -85,6 +89,7 @@ TreeSceneItem::TreeSceneItem(
     connect(&m_liveChangeAnimation, &QVariantAnimation::finished, this, [this] {
         m_liveChangeProgress = 1.0;
         m_livePreviousPositions.clear();
+        m_livePreviousProjectedLayout.clear();
         m_liveEnteringNodes.clear();
         m_liveDepartingLayout.clear();
         update();
@@ -157,6 +162,8 @@ void TreeSceneItem::paint(QPainter *painter)
     const ThemePalette &theme = profile.palette;
     const BranchStyle &branches = profile.branches;
     const LabelStyle &labels = profile.labels;
+    const QVector<LayoutNode> renderedLayout = perspective
+        ? resolvedPerspectiveLayout() : m_layout;
     painter->setRenderHint(QPainter::Antialiasing, true);
     painter->fillRect(boundingRect(), theme.sceneCanvas);
     painter->save();
@@ -166,7 +173,7 @@ void TreeSceneItem::paint(QPainter *painter)
     }
 
     const QSet<NodeId> visibleLabels =
-        visibleLabelIds(presentationZoom);
+        visibleLabelIds(presentationZoom, renderedLayout);
 
     const auto paintDeparting =
         [this, painter, &theme, &branches, perspective](
@@ -218,7 +225,7 @@ void TreeSceneItem::paint(QPainter *painter)
         painter->drawPath(crown);
     }
 
-    for (const LayoutNode &layout : m_layout) {
+    for (const LayoutNode &layout : renderedLayout) {
         const FileNode *entry = node(layout.id);
         if (!entry)
             continue;
@@ -281,7 +288,7 @@ void TreeSceneItem::paint(QPainter *painter)
         painter->drawPath(branch);
     }
 
-    for (const LayoutNode &layout : m_layout) {
+    for (const LayoutNode &layout : renderedLayout) {
         const FileNode *entry = node(layout.id);
         if (!entry)
             continue;
@@ -363,9 +370,13 @@ void TreeSceneItem::paint(QPainter *painter)
         painter->restore();
     }
 
-    if (const LayoutNode *focusedLayout =
-            layoutNode(m_navigation.focusedId());
-        focusedLayout && focusedLayout->hiddenChildCount > 0) {
+    const auto focusedLayout = std::find_if(
+        renderedLayout.cbegin(), renderedLayout.cend(),
+        [this](const LayoutNode &layout) {
+            return layout.id == m_navigation.focusedId();
+        });
+    if (focusedLayout != renderedLayout.cend()
+        && focusedLayout->hiddenChildCount > 0) {
         painter->save();
         painter->setPen(theme.textDark);
         QFont countFont = painter->font();
@@ -539,6 +550,8 @@ void TreeSceneItem::setReducedMotion(bool reducedMotion)
     m_liveChangeProgress = 1.0;
     m_previousPositions.clear();
     m_livePreviousPositions.clear();
+    m_previousProjectedLayout.clear();
+    m_livePreviousProjectedLayout.clear();
     m_enteringNodes.clear();
     m_liveEnteringNodes.clear();
     m_departingLayout.clear();
@@ -797,6 +810,8 @@ void TreeSceneItem::finishTransientAnimationsForTravel()
     m_liveChangeProgress = 1.0;
     m_previousPositions.clear();
     m_livePreviousPositions.clear();
+    m_previousProjectedLayout.clear();
+    m_livePreviousProjectedLayout.clear();
     m_enteringNodes.clear();
     m_liveEnteringNodes.clear();
     m_departingLayout.clear();
@@ -889,25 +904,31 @@ void TreeSceneItem::applyPerspectiveWheel(
 NodeId TreeSceneItem::nodeAt(const QPointF &viewPosition) const
 {
     const QPointF scenePosition = toScene(viewPosition);
+    const QVector<LayoutNode> renderedLayout = usesPerspectiveProjection()
+        ? resolvedPerspectiveLayout() : m_layout;
     const qreal minimumHitOpacity = usesPerspectiveProjection()
         ? ThemeRegistry::active().perspective.minimumHitOpacity
         : 0.28;
-    const auto isHittable = [this, minimumHitOpacity](
+    const qreal arrivalHitThreshold = usesPerspectiveProjection()
+        ? 1.0 : 0.35;
+    const auto isHittable = [this, minimumHitOpacity, arrivalHitThreshold](
                                 const LayoutNode &layout) {
         return node(layout.id)
             && !(m_enteringNodes.contains(layout.id)
-                 && m_transitionProgress < 0.35)
+                 && m_transitionProgress < arrivalHitThreshold)
             && !(m_liveEnteringNodes.contains(layout.id)
-                 && m_liveChangeProgress < 0.35)
+                 && m_liveChangeProgress < arrivalHitThreshold)
             && layout.depthOpacity >= minimumHitOpacity;
     };
 
     if (usesPerspectiveProjection()) {
-        const QSet<NodeId> visibleLabels = visibleLabelIds(1.0);
+        const QSet<NodeId> visibleLabels =
+            visibleLabelIds(1.0, renderedLayout);
 
         // Endpoints and labels are painted in a second pass above every branch,
         // so they must receive the first hit pass regardless of branch depth.
-        for (auto it = m_layout.crbegin(); it != m_layout.crend(); ++it) {
+        for (auto it = renderedLayout.crbegin();
+             it != renderedLayout.crend(); ++it) {
             if (!isHittable(*it))
                 continue;
             if ((visibleLabels.contains(it->id)
@@ -918,14 +939,16 @@ NodeId TreeSceneItem::nodeAt(const QPointF &viewPosition) const
             }
         }
 
-        for (auto it = m_layout.crbegin(); it != m_layout.crend(); ++it) {
+        for (auto it = renderedLayout.crbegin();
+             it != renderedLayout.crend(); ++it) {
             if (isHittable(*it) && it->hitArea.contains(scenePosition))
                 return it->id;
         }
         return InvalidNodeId;
     }
 
-    for (auto it = m_layout.crbegin(); it != m_layout.crend(); ++it) {
+    for (auto it = renderedLayout.crbegin();
+         it != renderedLayout.crend(); ++it) {
         const FileNode *entry = node(it->id);
         if (!entry || !isHittable(*it)) {
             continue;
@@ -954,10 +977,11 @@ NodeId TreeSceneItem::nodeAt(const QPointF &viewPosition) const
 }
 
 QSet<NodeId> TreeSceneItem::visibleLabelIds(
-    qreal presentationZoom) const
+    qreal presentationZoom,
+    const QVector<LayoutNode> &layout) const
 {
     const LabelStyle &labels = ThemeRegistry::active().labels;
-    QVector<LayoutNode> labelLayout = m_layout;
+    QVector<LayoutNode> labelLayout = layout;
     for (LayoutNode &layout : labelLayout) {
         const QPointF position = drawnPosition(layout);
         layout.labelBounds.translate(position - layout.position);
@@ -965,7 +989,7 @@ QSet<NodeId> TreeSceneItem::visibleLabelIds(
     QSet<NodeId> visibleLabels = LabelVisibilityPolicy::visibleLabels(
         labelLayout, m_navigation.focusedId(), m_navigation.selectedId(),
         m_hovered, presentationZoom);
-    for (const LayoutNode &layout : std::as_const(m_layout)) {
+    for (const LayoutNode &layout : std::as_const(labelLayout)) {
         if (LabelVisibilityPolicy::depthOpacity(
                 layout.depthOpacity, presentationZoom)
             < labels.rearVisibilityThreshold
@@ -975,6 +999,35 @@ QSet<NodeId> TreeSceneItem::visibleLabelIds(
         }
     }
     return visibleLabels;
+}
+
+QVector<LayoutNode> TreeSceneItem::resolvedPerspectiveLayout() const
+{
+    QVector<LayoutNode> result = m_layout;
+    const qreal hitPadding =
+        ThemeRegistry::active().perspective.hitPadding;
+    for (LayoutNode &layout : result) {
+        const auto previous = m_previousProjectedLayout.constFind(layout.id);
+        if (previous != m_previousProjectedLayout.cend()
+            && m_transitionProgress < 1.0) {
+            layout = ProjectedSurfaceGeometry::interpolate(
+                *previous, layout, m_transitionProgress, hitPadding);
+        }
+        const auto livePrevious =
+            m_livePreviousProjectedLayout.constFind(layout.id);
+        if (livePrevious != m_livePreviousProjectedLayout.cend()
+            && m_liveChangeProgress < 1.0) {
+            layout = ProjectedSurfaceGeometry::interpolate(
+                *livePrevious, layout,
+                m_liveChangeProgress, hitPadding);
+        }
+    }
+    std::stable_sort(
+        result.begin(), result.end(),
+        [](const LayoutNode &left, const LayoutNode &right) {
+            return left.cameraDepth > right.cameraDepth;
+        });
+    return result;
 }
 
 const FileNode *TreeSceneItem::node(NodeId id) const
@@ -993,9 +1046,8 @@ const LayoutNode *TreeSceneItem::layoutNode(NodeId id) const
 
 QPointF TreeSceneItem::drawnPosition(const LayoutNode &layout) const
 {
-    // Stage 6 switches perspective endpoints atomically and animates only
-    // opacity. This keeps painted branchSurface and hitArea geometry identical;
-    // interpolated perspective surfaces belong in the later motion stage.
+    // Perspective callers resolve the complete surface before reaching this
+    // legacy planar helper.
     if (usesPerspectiveProjection())
         return layout.position;
 
@@ -1096,6 +1148,8 @@ void TreeSceneItem::focusNode(NodeId id, bool addToHistory)
     }
 
     const bool perspective = usesPerspectiveProjection();
+    const QVector<LayoutNode> previousLayout = perspective
+        ? resolvedPerspectiveLayout() : m_layout;
     const qreal previousTravelDepth = m_travelDepth;
     const qreal previousMaximumTravelDepth = m_maximumTravelDepth;
     if (perspective) {
@@ -1107,9 +1161,9 @@ void TreeSceneItem::focusNode(NodeId id, bool addToHistory)
     m_departingLayout.clear();
     m_enteringNodes.clear();
     m_previousPositions.clear();
-    for (const LayoutNode &layout : m_layout)
+    m_previousProjectedLayout.clear();
+    for (const LayoutNode &layout : previousLayout)
         m_previousPositions.insert(layout.id, drawnPosition(layout));
-    const QVector<LayoutNode> previousLayout = m_layout;
     m_navigation.focus(id, addToHistory);
     if (perspective)
         resetPerspectiveTravel();
@@ -1140,8 +1194,16 @@ void TreeSceneItem::focusNode(NodeId id, bool addToHistory)
         }
     }
     for (const LayoutNode &layout : std::as_const(m_layout)) {
-        if (m_previousPositions.contains(layout.id))
+        const auto previous = std::find_if(
+            previousLayout.cbegin(), previousLayout.cend(),
+            [&layout](const LayoutNode &entry) {
+                return entry.id == layout.id;
+            });
+        if (previous != previousLayout.cend()) {
+            if (perspective)
+                m_previousProjectedLayout.insert(layout.id, *previous);
             continue;
+        }
         m_previousPositions.insert(layout.id, layout.branchStart);
         m_enteringNodes.insert(layout.id);
     }
@@ -1151,6 +1213,7 @@ void TreeSceneItem::focusNode(NodeId id, bool addToHistory)
     if (m_reducedMotion) {
         m_transitionProgress = 1.0;
         m_previousPositions.clear();
+        m_previousProjectedLayout.clear();
         m_enteringNodes.clear();
         m_departingLayout.clear();
     } else {
@@ -1251,16 +1314,18 @@ void TreeSceneItem::applyTreeChange(
     const TreeChangeSet &change,
     bool notifyPerspectiveCameraChange)
 {
+    const bool perspective = usesPerspectiveProjection();
+    const QVector<LayoutNode> previousLayout = perspective
+        ? resolvedPerspectiveLayout() : m_layout;
     m_liveChangeAnimation.stop();
     m_liveChangeProgress = 1.0;
     m_livePreviousPositions.clear();
+    m_livePreviousProjectedLayout.clear();
     m_liveEnteringNodes.clear();
     m_liveDepartingLayout.clear();
 
-    if (usesPerspectiveProjection())
+    if (perspective)
         freezePerspectiveTravel();
-
-    const QVector<LayoutNode> previousLayout = m_layout;
     relayout(notifyPerspectiveCameraChange);
 
     QHash<NodeId, NodeKind> removed;
@@ -1279,6 +1344,15 @@ void TreeSceneItem::applyTreeChange(
 
     const QSet<NodeId> added(change.added.cbegin(), change.added.cend());
     for (const LayoutNode &layout : std::as_const(m_layout)) {
+        if (perspective) {
+            const auto previous = std::find_if(
+                previousLayout.cbegin(), previousLayout.cend(),
+                [&layout](const LayoutNode &entry) {
+                    return entry.id == layout.id;
+                });
+            if (previous != previousLayout.cend())
+                m_livePreviousProjectedLayout.insert(layout.id, *previous);
+        }
         if (!added.contains(layout.id))
             continue;
         m_liveEnteringNodes.insert(layout.id);
@@ -1287,9 +1361,11 @@ void TreeSceneItem::applyTreeChange(
 
     if (m_reducedMotion
         || (m_liveEnteringNodes.isEmpty()
-            && m_liveDepartingLayout.isEmpty())) {
+            && m_liveDepartingLayout.isEmpty()
+            && m_livePreviousProjectedLayout.isEmpty())) {
         m_liveDepartingLayout.clear();
         m_livePreviousPositions.clear();
+        m_livePreviousProjectedLayout.clear();
         m_liveEnteringNodes.clear();
         return;
     }

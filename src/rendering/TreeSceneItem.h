@@ -132,7 +132,9 @@ private:
     [[nodiscard]] QPointF toScene(const QPointF &viewPosition) const;
     [[nodiscard]] NodeId nodeAt(const QPointF &viewPosition) const;
     [[nodiscard]] QSet<NodeId> visibleLabelIds(
-        qreal presentationZoom) const;
+        qreal presentationZoom,
+        const QVector<LayoutNode> &layout) const;
+    [[nodiscard]] QVector<LayoutNode> resolvedPerspectiveLayout() const;
     [[nodiscard]] const FileNode *node(NodeId id) const;
     [[nodiscard]] const LayoutNode *layoutNode(NodeId id) const;
     [[nodiscard]] QPointF drawnPosition(const LayoutNode &node) const;
@@ -165,6 +167,8 @@ private:
     NavigationState m_navigation {1};
     QHash<NodeId, QPointF> m_previousPositions;
     QHash<NodeId, QPointF> m_livePreviousPositions;
+    QHash<NodeId, LayoutNode> m_previousProjectedLayout;
+    QHash<NodeId, LayoutNode> m_livePreviousProjectedLayout;
     QSet<NodeId> m_enteringNodes;
     QSet<NodeId> m_liveEnteringNodes;
     QVariantAnimation m_focusAnimation;

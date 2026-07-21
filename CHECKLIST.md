@@ -36,10 +36,13 @@ check `avahi-daemon.socket`; the existing Toolbx binds that host socket.
   tapered `branchSurface` paths far-to-near, then hit-tests visible labels and
   endpoints before matching `hitArea` paths, each near-to-far. Viewport size
   changes trigger reprojection.
-- Perspective focus/live endpoints switch atomically at this stage. Arrivals
-  and resolvable focus departures use opacity without interpolating endpoints,
-  so painted and hit geometry cannot diverge. Live-removal departure remains
-  unresolved; full projected-surface interpolation is deferred.
+- Surviving perspective nodes interpolate complete projected geometry during
+  focus and live transitions. A single depth-sorted resolved layout feeds
+  branch paint, endpoints, labels, and hit-testing, and the shared pure surface
+  builder always regenerates paint and padded hit geometry together.
+- Interrupted focus/live transitions capture their currently visible geometry
+  as the next starting state. Arrivals and renderer-owned departure snapshots
+  remain opacity-only and are not hit targets while transient.
 - Perspective travel has dedicated current/start/target/range state and its own
   animation. Wheel/touchpad input, Page Up/Down, compact controls, reset, and
   blank-space double-click all drive bounded reprojection; planar input and
@@ -134,9 +137,9 @@ Remaining Stage 9 validation:
   visible controls, reset, open-space travel, and focus/backtracking. The
   startup frame is inspected; compositor-level synthetic key delivery was
   inconclusive and is not counted as passing evidence.
-- Decide how projected surfaces interpolate during focus/live transitions;
-  preserve the current atomic geometry fallback until paint and hit can derive
-  from one interpolated path.
+- Projected-surface interpolation is covered by pure geometry invariants and an
+  offscreen focus-transition paint test. Keep checking interruption, live churn,
+  and backtracking in the isolated interactive sweep.
 - Renderer-owned departure snapshots now preserve the final typed branch
   geometry while terminal reconciliation prunes removed semantic subtrees
   before notifying observers. Recreated and retyped paths receive fresh IDs,
