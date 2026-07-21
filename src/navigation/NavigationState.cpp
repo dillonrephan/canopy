@@ -31,3 +31,31 @@ NodeId NavigationState::takeBackTarget()
         return InvalidNodeId;
     return m_backHistory.takeLast();
 }
+
+NavigationReconciliation NavigationState::reconcileRemoved(
+    const QSet<NodeId> &removedIds,
+    NodeId fallbackId)
+{
+    const qsizetype previousHistorySize = m_backHistory.size();
+    m_backHistory.removeIf([&removedIds](NodeId id) {
+        return removedIds.contains(id);
+    });
+
+    NavigationReconciliation result;
+    if (removedIds.contains(m_focusedId)) {
+        result.focusChanged = m_focusedId != fallbackId;
+        result.selectionChanged = m_selectedId != fallbackId;
+        m_focusedId = fallbackId;
+        m_selectedId = fallbackId;
+    } else if (removedIds.contains(m_selectedId)) {
+        result.selectionChanged = m_selectedId != m_focusedId;
+        m_selectedId = m_focusedId;
+    }
+    if (!removedIds.isEmpty()) {
+        m_backHistory.removeIf([this](NodeId id) {
+            return id == m_focusedId;
+        });
+    }
+    result.historyChanged = m_backHistory.size() != previousHistorySize;
+    return result;
+}

@@ -2,12 +2,14 @@
 #include "ThemeRegistry.h"
 
 #include <QDir>
+#include <QFile>
 #include <QImage>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QtTest>
+
 
 class TreeSceneItemTest final : public QObject
 {
@@ -20,6 +22,8 @@ private slots:
     void emptyDirectoryTravelIsSignalFree();
     void offscreenPaintTracksTravelAndResetState();
     void planarReducedMotionSnapsCameraWithOneSignal();
+    void removedDepartureSnapshotPaintsWithoutHitTarget();
+    void removedHistoryEntryIsReconciledBeforeNavigationSignal();
 };
 
 namespace {
@@ -40,11 +44,40 @@ public:
             Qt::NoModifier);
         mouseDoubleClickEvent(&event);
     }
+
+    void clickAt(const QPointF &position)
+    {
+        QMouseEvent press(
+            QEvent::MouseButtonPress,
+            position,
+            position,
+            position,
+            Qt::LeftButton,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        mousePressEvent(&press);
+        QMouseEvent release(
+            QEvent::MouseButtonRelease,
+            position,
+            position,
+            position,
+            Qt::LeftButton,
+            Qt::NoButton,
+            Qt::NoModifier);
+        mouseReleaseEvent(&release);
+    }
 };
 
 void makeDirectory(const QDir &root, const QString &name)
 {
     QVERIFY2(root.mkdir(name), qPrintable(root.filePath(name)));
+}
+
+void makeFile(const QString &path)
+{
+    QFile file(path);
+    QVERIFY2(file.open(QIODevice::WriteOnly), qPrintable(file.errorString()));
+    QCOMPARE(file.write("leaf"), qint64(4));
 }
 
 void travelToEnd(TreeSceneItem &scene)
@@ -80,6 +113,23 @@ qsizetype changedPixelCount(const QImage &left, const QImage &right)
             changed += leftLine[x] != rightLine[x];
     }
     return changed;
+}
+
+
+QPoint firstChangedPixel(const QImage &left, const QImage &right)
+{
+    Q_ASSERT(left.size() == right.size());
+    for (int y = 0; y < left.height(); ++y) {
+        const auto *leftLine = reinterpret_cast<const QRgb *>(
+            left.constScanLine(y));
+        const auto *rightLine = reinterpret_cast<const QRgb *>(
+            right.constScanLine(y));
+        for (int x = 0; x < left.width(); ++x) {
+            if (leftLine[x] != rightLine[x])
+                return {x, y};
+        }
+    }
+    return {-1, -1};
 }
 }
 
@@ -272,6 +322,81 @@ void TreeSceneItemTest::planarReducedMotionSnapsCameraWithOneSignal()
     scene.setReducedMotion(false);
     scene.setReducedMotion(true);
     QCOMPARE(cameraSpy.count(), 0);
+}
+
+void TreeSceneItemTest::removedDepartureSnapshotPaintsWithoutHitTarget()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    const QString leafPath = temporaryDirectory.filePath(
+        QStringLiteral("departing.txt"));
+    makeFile(leafPath);
+
+    EventTreeSceneItem scene(
+        temporaryDirectory.path(), ProjectionKind::Planar);
+    scene.setSize({1000.0, 800.0});
+    QTRY_COMPARE_WITH_TIMEOUT(
+        scene.selectedMaterializedChildCount(), qulonglong(1), 3000);
+    const QString rootPath = scene.selectedPath();
+
+    QImage departureFrame;
+    connect(&scene, &TreeSceneItem::selectionChanged,
+            this, [&scene, &departureFrame] {
+                if (scene.selectedMaterializedChildCount() == 0)
+                    departureFrame = renderScene(scene);
+            });
+
+    QVERIFY(QFile::remove(leafPath));
+    QTRY_VERIFY_WITH_TIMEOUT(!departureFrame.isNull(), 5000);
+    QCOMPARE(scene.selectedMaterializedChildCount(), qulonglong(0));
+
+    EventTreeSceneItem clearedScene(
+        temporaryDirectory.path(), ProjectionKind::Planar);
+    clearedScene.setSize({1000.0, 800.0});
+    clearedScene.setReducedMotion(true);
+    QTRY_COMPARE_WITH_TIMEOUT(
+        clearedScene.selectedMaterializedChildCount(), qulonglong(0), 3000);
+    const QImage clearedFrame = renderScene(clearedScene);
+    QVERIFY(changedPixelCount(departureFrame, clearedFrame) > 100);
+
+    const QPoint paintedDeparture =
+        firstChangedPixel(departureFrame, clearedFrame);
+    QVERIFY(paintedDeparture.x() >= 0);
+    scene.clickAt(paintedDeparture);
+    QCOMPARE(scene.selectedPath(), rootPath);
+
+    scene.setReducedMotion(true);
+    QCOMPARE(renderScene(scene), clearedFrame);
+}
+
+void TreeSceneItemTest::removedHistoryEntryIsReconciledBeforeNavigationSignal()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    QDir root(temporaryDirectory.path());
+    QVERIFY(root.mkdir(QStringLiteral("branch")));
+    const QString branchPath = root.filePath(QStringLiteral("branch"));
+
+    TreeSceneItem scene(temporaryDirectory.path());
+    scene.setSize({1000.0, 800.0});
+    scene.setReducedMotion(true);
+    QTRY_COMPARE_WITH_TIMEOUT(
+        scene.selectedMaterializedChildCount(), qulonglong(1), 3000);
+    QVERIFY(scene.navigateToPath(branchPath));
+    scene.goUp();
+    QCOMPARE(scene.breadcrumb(), root.path());
+    QVERIFY(scene.canGoBack());
+
+    QSignalSpy navigationSpy(&scene, &TreeSceneItem::navigationChanged);
+    QVERIFY(QDir(branchPath).removeRecursively());
+    makeFile(branchPath);
+    QTRY_VERIFY_WITH_TIMEOUT(!scene.canGoBack(), 5000);
+    QVERIFY(navigationSpy.count() >= 1);
+    QCOMPARE(scene.breadcrumb(), root.path());
+    QCOMPARE(scene.selectedMaterializedChildCount(), qulonglong(1));
+
+    scene.goBack();
+    QCOMPARE(scene.breadcrumb(), root.path());
 }
 
 QTEST_MAIN(TreeSceneItemTest)

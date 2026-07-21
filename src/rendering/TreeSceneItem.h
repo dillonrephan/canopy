@@ -124,6 +124,11 @@ protected:
     void wheelEvent(QWheelEvent *event) override;
 
 private:
+    struct DepartureSnapshot {
+        LayoutNode layout;
+        NodeKind kind = NodeKind::Directory;
+    };
+
     [[nodiscard]] QPointF toScene(const QPointF &viewPosition) const;
     [[nodiscard]] NodeId nodeAt(const QPointF &viewPosition) const;
     [[nodiscard]] QSet<NodeId> visibleLabelIds(
@@ -146,13 +151,16 @@ private:
     void resetPerspectiveTravel();
     void startPerspectiveTravel(qreal targetDepth);
     void applyPerspectiveWheel(qreal angleDeltaY, qreal pixelDeltaY);
-    void applyTreeChange(const TreeChangeSet &change);
+    void handleTreeChange(const TreeChangeSet &change);
+    void applyTreeChange(
+        const TreeChangeSet &change,
+        bool notifyPerspectiveCameraChange = true);
     void relayout(bool notifyPerspectiveCameraChange = true);
 
     FilesystemTreeModel m_filesystemModel;
     QVector<LayoutNode> m_layout;
-    QVector<LayoutNode> m_departingLayout;
-    QVector<LayoutNode> m_liveDepartingLayout;
+    QVector<DepartureSnapshot> m_departingLayout;
+    QVector<DepartureSnapshot> m_liveDepartingLayout;
     TreeLayoutEngine m_layoutEngine;
     NavigationState m_navigation {1};
     QHash<NodeId, QPointF> m_previousPositions;

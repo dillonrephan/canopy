@@ -17,11 +17,20 @@ enum class TreeChangeReason {
     Reconciled
 };
 
+struct RemovedTreeNode {
+    NodeId id = InvalidNodeId;
+    NodeKind kind = NodeKind::Directory;
+
+    friend bool operator==(
+        const RemovedTreeNode &,
+        const RemovedTreeNode &) = default;
+};
+
 struct TreeChangeSet {
     TreeChangeReason reason = TreeChangeReason::Reset;
     NodeId directoryId = InvalidNodeId;
     QVector<NodeId> added;
-    QVector<NodeId> removed;
+    QVector<RemovedTreeNode> removed;
 };
 
 Q_DECLARE_METATYPE(TreeChangeSet)
@@ -36,6 +45,10 @@ public:
         const QString &rootPath, QObject *parent = nullptr);
 
     [[nodiscard]] NodeId rootId() const noexcept { return 1; }
+    [[nodiscard]] NodeId activeDirectoryId() const noexcept
+    {
+        return m_activeDirectoryId;
+    }
     [[nodiscard]] const QVector<FileNode> &nodes() const noexcept
     {
         return m_nodes;
@@ -63,7 +76,16 @@ private:
     void applyScanUpdate(NodeId id, const DirectoryScanUpdate &update);
     void applyScanResult(NodeId id, const DirectoryScanResult &result);
     [[nodiscard]] QVector<NodeId> appendScannedEntries(
-        NodeId id, const QVector<ScannedEntry> &entries);
+        NodeId id,
+        const QVector<ScannedEntry> &entries,
+        bool finalizeKinds = false);
+    [[nodiscard]] QVector<RemovedTreeNode> removedClosure(
+        const QVector<NodeId> &roots,
+        NodeId protectedDirectoryId) const;
+    void pruneRemovedNodes(
+        const QVector<RemovedTreeNode> &removed,
+        NodeId fallbackDirectoryId);
+    void reconcileDirectoryOwners(NodeId fallbackDirectoryId);
     void updateWatchedDirectories();
     void processWatchedChanges();
     [[nodiscard]] NodeId nodeIdForPath(const QString &path) const;

@@ -27,6 +27,9 @@ private slots:
     void contentsModelPagesWithoutRetainingEarlierPages();
     void filesystemModelReportsExactReconciliationDeltas();
     void filesystemModelObservesExternalDirectoryChanges();
+    void filesystemModelPrunesLoadedClosureBeforeEmission();
+    void filesystemModelRecreatedPathGetsFreshIds();
+    void filesystemModelFinalKindTransitionPrunesDescendants();
 };
 
 namespace {
@@ -35,6 +38,16 @@ void createFile(const QString &path, const QByteArray &contents = {})
     QFile file(path);
     QVERIFY2(file.open(QIODevice::WriteOnly), qPrintable(file.errorString()));
     QCOMPARE(file.write(contents), contents.size());
+}
+
+const FileNode *nodeForPath(
+    const FilesystemTreeModel &model, const QString &path)
+{
+    const auto found = std::ranges::find_if(
+        model.nodes(), [&path](const FileNode &entry) {
+            return entry.path == path;
+        });
+    return found == model.nodes().cend() ? nullptr : &*found;
 }
 }
 
@@ -373,8 +386,8 @@ void DirectoryScannerTest::filesystemModelReportsExactReconciliationDeltas()
     for (const TreeChangeSet &change : std::as_const(changes)) {
         for (const NodeId id : change.added)
             reportedAdded.insert(id);
-        for (const NodeId id : change.removed)
-            reportedRemoved.insert(id);
+        for (const RemovedTreeNode &entry : change.removed)
+            reportedRemoved.insert(entry.id);
     }
     QCOMPARE(reportedAdded, QSet<NodeId>({addedNode->id}));
     QVERIFY(reportedRemoved.isEmpty());
@@ -394,15 +407,19 @@ void DirectoryScannerTest::filesystemModelReportsExactReconciliationDeltas()
     for (const TreeChangeSet &change : std::as_const(changes)) {
         for (const NodeId id : change.added)
             reportedAdded.insert(id);
-        for (const NodeId id : change.removed)
-            reportedRemoved.insert(id);
+        for (const RemovedTreeNode &entry : change.removed)
+            reportedRemoved.insert(entry.id);
     }
     QVERIFY(reportedAdded.isEmpty());
     QCOMPARE(reportedRemoved, QSet<NodeId>({removedId}));
     const auto removalReconciliation = latestReconciliation();
     QVERIFY(removalReconciliation != changes.crend());
     QVERIFY(removalReconciliation->added.isEmpty());
-    QCOMPARE(removalReconciliation->removed, QVector<NodeId>({removedId}));
+    QCOMPARE(removalReconciliation->removed.size(), qsizetype(1));
+    QCOMPARE(removalReconciliation->removed.first().id, removedId);
+    QCOMPARE(
+        removalReconciliation->removed.first().kind,
+        NodeKind::Document);
 }
 
 void DirectoryScannerTest::filesystemModelObservesExternalDirectoryChanges()
@@ -468,6 +485,161 @@ void DirectoryScannerTest::filesystemModelObservesExternalDirectoryChanges()
             const FileNode *child = model.node(childId);
             return child && child->path == sproutPath;
         }));
+}
+
+void DirectoryScannerTest::filesystemModelPrunesLoadedClosureBeforeEmission()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    QDir root(temporaryDirectory.path());
+    QVERIFY(root.mkpath(QStringLiteral("branch/nested")));
+    const QString branchPath = root.filePath(QStringLiteral("branch"));
+    const QString nestedPath = root.filePath(QStringLiteral("branch/nested"));
+    const QString leafPath = root.filePath(
+        QStringLiteral("branch/nested/leaf.txt"));
+    createFile(leafPath, "leaf");
+
+    FilesystemTreeModel model(root.path());
+    QTRY_VERIFY_WITH_TIMEOUT(nodeForPath(model, branchPath), 3000);
+    const NodeId branchId = nodeForPath(model, branchPath)->id;
+    model.setActiveDirectory(branchId);
+    QTRY_VERIFY_WITH_TIMEOUT(nodeForPath(model, nestedPath), 3000);
+    const NodeId nestedId = nodeForPath(model, nestedPath)->id;
+    model.setActiveDirectory(nestedId);
+    QTRY_VERIFY_WITH_TIMEOUT(nodeForPath(model, leafPath), 3000);
+    const NodeId leafId = nodeForPath(model, leafPath)->id;
+
+    model.setActiveDirectory(model.rootId());
+    model.setContentsDirectory(branchId);
+    QTRY_VERIFY_WITH_TIMEOUT(!model.contentsModel()->loading(), 3000);
+    QCOMPARE(model.activeDirectoryId(), model.rootId());
+
+    QVector<RemovedTreeNode> removed;
+    bool prunedBeforeEmission = false;
+    connect(&model, &FilesystemTreeModel::treeChanged,
+            this, [&model, &removed, &prunedBeforeEmission](
+                      const TreeChangeSet &change) {
+                if (change.reason != TreeChangeReason::Reconciled
+                    || change.removed.isEmpty()) {
+                    return;
+                }
+                removed = change.removed;
+                prunedBeforeEmission = std::ranges::all_of(
+                    removed, [&model](const RemovedTreeNode &entry) {
+                        return model.node(entry.id) == nullptr;
+                    });
+            });
+
+    QVERIFY(QDir(branchPath).removeRecursively());
+    QTRY_VERIFY_WITH_TIMEOUT(model.node(branchId) == nullptr, 5000);
+    QVERIFY(prunedBeforeEmission);
+    QCOMPARE(removed.size(), qsizetype(3));
+    QCOMPARE(removed.at(0).id, branchId);
+    QCOMPARE(removed.at(0).kind, NodeKind::Directory);
+    QCOMPARE(removed.at(1).id, nestedId);
+    QCOMPARE(removed.at(1).kind, NodeKind::Directory);
+    QCOMPARE(removed.at(2).id, leafId);
+    QCOMPARE(removed.at(2).kind, NodeKind::Document);
+    QCOMPARE(model.nodes().size(), qsizetype(1));
+    QVERIFY(model.node(model.rootId())->children.isEmpty());
+    QCOMPARE(model.activeDirectoryId(), model.rootId());
+    QTRY_VERIFY_WITH_TIMEOUT(!model.contentsModel()->loading(), 3000);
+    QCOMPARE(model.contentsModel()->rowCount(), 0);
+    QCOMPARE(model.contentsModel()->totalEntryCount(), qulonglong(0));
+}
+
+void DirectoryScannerTest::filesystemModelRecreatedPathGetsFreshIds()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    QDir root(temporaryDirectory.path());
+    const QString path = root.filePath(QStringLiteral("repeat.txt"));
+    createFile(path, "first");
+
+    FilesystemTreeModel model(root.path());
+    QTRY_VERIFY_WITH_TIMEOUT(nodeForPath(model, path), 3000);
+    NodeId previousId = nodeForPath(model, path)->id;
+
+    for (int iteration = 0; iteration < 5; ++iteration) {
+        QVERIFY(QFile::remove(path));
+        QTRY_VERIFY_WITH_TIMEOUT(nodeForPath(model, path) == nullptr, 5000);
+        QCOMPARE(model.nodes().size(), qsizetype(1));
+
+        createFile(path, QByteArray::number(iteration));
+        QTRY_VERIFY_WITH_TIMEOUT(nodeForPath(model, path), 5000);
+        const NodeId recreatedId = nodeForPath(model, path)->id;
+        QVERIFY(recreatedId > previousId);
+        previousId = recreatedId;
+        QCOMPARE(model.nodes().size(), qsizetype(2));
+    }
+}
+
+void DirectoryScannerTest::filesystemModelFinalKindTransitionPrunesDescendants()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    QDir root(temporaryDirectory.path());
+    QVERIFY(root.mkpath(QStringLiteral("changing/nested")));
+    const QString changingPath = root.filePath(QStringLiteral("changing"));
+    const QString nestedPath = root.filePath(QStringLiteral("changing/nested"));
+    const QString leafPath = root.filePath(
+        QStringLiteral("changing/nested/leaf.txt"));
+    createFile(leafPath, "leaf");
+
+    FilesystemTreeModel model(root.path());
+    QTRY_VERIFY_WITH_TIMEOUT(nodeForPath(model, changingPath), 3000);
+    const NodeId changingId = nodeForPath(model, changingPath)->id;
+    model.setActiveDirectory(changingId);
+    QTRY_VERIFY_WITH_TIMEOUT(nodeForPath(model, nestedPath), 3000);
+    const NodeId nestedId = nodeForPath(model, nestedPath)->id;
+    model.setActiveDirectory(nestedId);
+    QTRY_VERIFY_WITH_TIMEOUT(nodeForPath(model, leafPath), 3000);
+    const NodeId leafId = nodeForPath(model, leafPath)->id;
+    model.setActiveDirectory(model.rootId());
+
+    bool progressKeptDirectoryKind = false;
+    QVector<RemovedTreeNode> removed;
+    QVector<NodeId> added;
+    connect(&model, &FilesystemTreeModel::treeChanged,
+            this, [&model, &changingPath, &progressKeptDirectoryKind,
+                   &removed, &added](
+                      const TreeChangeSet &change) {
+                const FileNode *changing = nodeForPath(model, changingPath);
+                if (change.reason == TreeChangeReason::Progress && changing)
+                    progressKeptDirectoryKind |= changing->isDirectory();
+                if (change.reason == TreeChangeReason::Reconciled) {
+                    removed = change.removed;
+                    added = change.added;
+                }
+            });
+
+    QVERIFY(QDir(changingPath).removeRecursively());
+    createFile(changingPath, "now a file");
+    QTRY_VERIFY_WITH_TIMEOUT(
+        nodeForPath(model, changingPath)
+            && !nodeForPath(model, changingPath)->isDirectory(),
+        5000);
+
+    const FileNode *changed = nodeForPath(model, changingPath);
+    QVERIFY(changed);
+    QVERIFY(changed->id > changingId);
+    QCOMPARE(changed->directoryState, DirectoryLoadState::Ready);
+    QCOMPARE(changed->totalChildCount, quint64(0));
+    QVERIFY(changed->children.isEmpty());
+    QVERIFY(changed->directoryStatus.isEmpty());
+    QVERIFY(progressKeptDirectoryKind);
+    QCOMPARE(removed.size(), qsizetype(3));
+    QCOMPARE(removed.at(0).id, changingId);
+    QCOMPARE(removed.at(0).kind, NodeKind::Directory);
+    QCOMPARE(removed.at(1).id, nestedId);
+    QCOMPARE(removed.at(1).kind, NodeKind::Directory);
+    QCOMPARE(removed.at(2).id, leafId);
+    QCOMPARE(removed.at(2).kind, NodeKind::Document);
+    QCOMPARE(added.size(), qsizetype(1));
+    QCOMPARE(added.first(), changed->id);
+    QVERIFY(!model.node(changingId));
+    QVERIFY(!model.node(nestedId));
+    QVERIFY(!model.node(leafId));
 }
 
 QTEST_GUILESS_MAIN(DirectoryScannerTest)

@@ -125,11 +125,7 @@ TreeSceneItem::TreeSceneItem(
     });
     connect(&m_filesystemModel, &FilesystemTreeModel::treeChanged,
             this, [this](const TreeChangeSet &change) {
-                if (!change.added.isEmpty() || !change.removed.isEmpty())
-                    applyTreeChange(change);
-                else
-                    relayout();
-                emit selectionChanged();
+                handleTreeChange(change);
             });
     connect(this, &TreeSceneItem::selectionChanged, this, [this] {
         const FileNode *selected = node(m_navigation.selectedId());
@@ -174,15 +170,13 @@ void TreeSceneItem::paint(QPainter *painter)
 
     const auto paintDeparting =
         [this, painter, &theme, &branches, perspective](
-            const QVector<LayoutNode> &layouts, qreal opacity) {
-        if (opacity <= 0.0 || layouts.isEmpty())
+            const QVector<DepartureSnapshot> &snapshots, qreal opacity) {
+        if (opacity <= 0.0 || snapshots.isEmpty())
             return;
         painter->save();
         painter->setOpacity(opacity);
-        for (const LayoutNode &layout : layouts) {
-            const FileNode *entry = node(layout.id);
-            if (!entry)
-                continue;
+        for (const DepartureSnapshot &snapshot : snapshots) {
+            const LayoutNode &layout = snapshot.layout;
             QColor branchColor = theme.wood;
             branchColor.setAlphaF(
                 branchColor.alphaF() * layout.depthOpacity);
@@ -196,7 +190,7 @@ void TreeSceneItem::paint(QPainter *painter)
                 continue;
             }
             const qreal depthScale = 1.0 - layout.depthLayer * 0.07;
-            const qreal branchWidth = (entry->isDirectory()
+            const qreal branchWidth = (snapshot.kind == NodeKind::Directory
                 ? branches.directoryWidth : branches.fileStemWidth)
                 * depthScale;
             painter->setPen(QPen(branchColor, branchWidth,
@@ -1135,8 +1129,15 @@ void TreeSceneItem::focusNode(NodeId id, bool addToHistory)
     for (const LayoutNode &layout : std::as_const(m_layout))
         currentIds.insert(layout.id);
     for (const LayoutNode &layout : previousLayout) {
-        if (!currentIds.contains(layout.id))
-            m_departingLayout.append(layout);
+        if (currentIds.contains(layout.id))
+            continue;
+        const FileNode *entry = node(layout.id);
+        if (entry) {
+            m_departingLayout.append({
+                .layout = layout,
+                .kind = entry->kind,
+            });
+        }
     }
     for (const LayoutNode &layout : std::as_const(m_layout)) {
         if (m_previousPositions.contains(layout.id))
@@ -1178,7 +1179,77 @@ void TreeSceneItem::setPathMessage(const QString &message)
     emit pathMessageChanged();
 }
 
-void TreeSceneItem::applyTreeChange(const TreeChangeSet &change)
+void TreeSceneItem::handleTreeChange(const TreeChangeSet &change)
+{
+    QSet<NodeId> invalidNavigationIds;
+    invalidNavigationIds.reserve(change.removed.size() + 2);
+    for (const RemovedTreeNode &entry : change.removed)
+        invalidNavigationIds.insert(entry.id);
+
+    const FileNode *focused = node(m_navigation.focusedId());
+    if (!focused || !focused->isDirectory())
+        invalidNavigationIds.insert(m_navigation.focusedId());
+    if (!node(m_navigation.selectedId()))
+        invalidNavigationIds.insert(m_navigation.selectedId());
+
+    const FileNode *changedDirectory = node(change.directoryId);
+    const NodeId fallbackId =
+        changedDirectory && changedDirectory->isDirectory()
+        ? changedDirectory->id : m_filesystemModel.rootId();
+    const qreal previousTravelDepth = m_travelDepth;
+    const qreal previousMaximumTravelDepth = m_maximumTravelDepth;
+    const QPointF previousPan = m_pan;
+    const qreal previousZoom = m_zoom;
+    const NavigationReconciliation navigation =
+        m_navigation.reconcileRemoved(
+            invalidNavigationIds, fallbackId);
+
+    if (navigation.focusChanged) {
+        if (usesPerspectiveProjection())
+            freezePerspectiveTravel();
+        finishTransientAnimationsForTravel();
+        if (usesPerspectiveProjection()) {
+            resetPerspectiveTravel();
+        } else {
+            m_cameraAnimation.stop();
+            m_pan = QPointF(120.0, 35.0);
+            m_cameraStartPan = m_pan;
+            m_cameraTargetPan = m_pan;
+            m_zoom = 1.0;
+            m_cameraStartZoom = m_zoom;
+            m_cameraTargetZoom = m_zoom;
+        }
+    }
+
+    if (!change.added.isEmpty() || !change.removed.isEmpty()) {
+        applyTreeChange(change, !navigation.focusChanged);
+    } else {
+        relayout(!navigation.focusChanged);
+    }
+
+    if (navigation.focusChanged) {
+        const bool cameraChangedForFallback = usesPerspectiveProjection()
+            ? !qFuzzyCompare(
+                1.0 + previousTravelDepth,
+                1.0 + m_travelDepth)
+                || !qFuzzyCompare(
+                    1.0 + previousMaximumTravelDepth,
+                    1.0 + m_maximumTravelDepth)
+            : previousPan != m_pan
+                || !qFuzzyCompare(previousZoom, m_zoom);
+        if (cameraChangedForFallback)
+            emit cameraChanged();
+    }
+    if (navigation.focusChanged || navigation.historyChanged)
+        emit navigationChanged();
+    emit selectionChanged();
+    if (navigation.focusChanged)
+        m_filesystemModel.setActiveDirectory(m_navigation.focusedId());
+}
+
+void TreeSceneItem::applyTreeChange(
+    const TreeChangeSet &change,
+    bool notifyPerspectiveCameraChange)
 {
     m_liveChangeAnimation.stop();
     m_liveChangeProgress = 1.0;
@@ -1190,13 +1261,20 @@ void TreeSceneItem::applyTreeChange(const TreeChangeSet &change)
         freezePerspectiveTravel();
 
     const QVector<LayoutNode> previousLayout = m_layout;
-    relayout();
+    relayout(notifyPerspectiveCameraChange);
 
-    const QSet<NodeId> removed(
-        change.removed.cbegin(), change.removed.cend());
+    QHash<NodeId, NodeKind> removed;
+    removed.reserve(change.removed.size());
+    for (const RemovedTreeNode &entry : change.removed)
+        removed.insert(entry.id, entry.kind);
     for (const LayoutNode &layout : previousLayout) {
-        if (removed.contains(layout.id))
-            m_liveDepartingLayout.append(layout);
+        const auto kind = removed.constFind(layout.id);
+        if (kind != removed.cend()) {
+            m_liveDepartingLayout.append({
+                .layout = layout,
+                .kind = *kind,
+            });
+        }
     }
 
     const QSet<NodeId> added(change.added.cbegin(), change.added.cend());

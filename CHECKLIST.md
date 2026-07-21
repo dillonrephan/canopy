@@ -137,10 +137,11 @@ Remaining Stage 9 validation:
 - Decide how projected surfaces interpolate during focus/live transitions;
   preserve the current atomic geometry fallback until paint and hit can derive
   from one interpolated path.
-- Replace retained removed semantics with renderer-owned departure snapshots
-  before pruning stale model nodes. Direct erasure would currently break
-  `paintDeparting`; indefinite retention risks stale inspector state and
-  unbounded churn memory.
+- Renderer-owned departure snapshots now preserve the final typed branch
+  geometry while terminal reconciliation prunes removed semantic subtrees
+  before notifying observers. Recreated and retyped paths receive fresh IDs,
+  Contents and navigation discard removed owners, repeated churn stays
+  bounded, and reduced motion retains no departure snapshots.
 - Keep the planar projector available until perspective navigation satisfies
   the same correctness and accessibility contracts.
 

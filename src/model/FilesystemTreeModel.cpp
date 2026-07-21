@@ -6,6 +6,7 @@
 #include <QFileInfo>
 
 #include <algorithm>
+#include <functional>
 #include <utility>
 
 FilesystemTreeModel::FilesystemTreeModel(QObject *parent)
@@ -234,7 +235,8 @@ void FilesystemTreeModel::applyScanUpdate(
     directory->directoryState = DirectoryLoadState::Loading;
     directory->directoryStatus = QStringLiteral("Discovered at least %1 entries…")
                                      .arg(update.discoveredEntryCount);
-    const QVector<NodeId> added = appendScannedEntries(id, update.entries);
+    const QVector<NodeId> added = appendScannedEntries(
+        id, update.entries, false);
     emit treeChanged({
         .reason = TreeChangeReason::Progress,
         .directoryId = id,
@@ -250,25 +252,45 @@ void FilesystemTreeModel::applyScanResult(
         return;
 
     const QVector<NodeId> previousChildren = directory->children;
+    QVector<NodeId> pruneRoots;
+    for (const NodeId previousId : previousChildren) {
+        const FileNode *previous = node(previousId);
+        if (!previous || previous->parentId != id)
+            continue;
+        const auto incoming = std::find_if(
+            result.entries.cbegin(), result.entries.cend(),
+            [previous](const ScannedEntry &entry) {
+                return entry.path == previous->path;
+            });
+        if (incoming == result.entries.cend()) {
+            pruneRoots.append(previousId);
+            continue;
+        }
+        if (previous->kind != incoming->kind)
+            pruneRoots.append(previousId);
+    }
+    const QVector<RemovedTreeNode> removed = removedClosure(
+        pruneRoots, id);
+    pruneRemovedNodes(removed, id);
+
+    directory = mutableNode(id);
+    if (!directory)
+        return;
     directory->children.clear();
     directory->totalChildCount = result.totalEntryCount;
     directory->directoryState = result.state;
     directory->directoryStatus = result.status;
-    static_cast<void>(appendScannedEntries(id, result.entries));
+    static_cast<void>(appendScannedEntries(id, result.entries, true));
     directory = mutableNode(id);
+    if (!directory)
+        return;
+    reconcileDirectoryOwners(id);
     const QSet<NodeId> previousIds(
         previousChildren.cbegin(), previousChildren.cend());
-    const QSet<NodeId> currentIds(
-        directory->children.cbegin(), directory->children.cend());
     QVector<NodeId> added;
     for (const NodeId currentId : std::as_const(directory->children)) {
         if (!previousIds.contains(currentId))
             added.append(currentId);
-    }
-    QVector<NodeId> removed;
-    for (const NodeId previousId : previousChildren) {
-        if (!currentIds.contains(previousId))
-            removed.append(previousId);
     }
     emit treeChanged({
         .reason = TreeChangeReason::Reconciled,
@@ -279,7 +301,9 @@ void FilesystemTreeModel::applyScanResult(
 }
 
 QVector<NodeId> FilesystemTreeModel::appendScannedEntries(
-    NodeId id, const QVector<ScannedEntry> &entries)
+    NodeId id,
+    const QVector<ScannedEntry> &entries,
+    bool finalizeKinds)
 {
     QVector<NodeId> added;
     FileNode *directory = mutableNode(id);
@@ -296,7 +320,19 @@ QVector<NodeId> FilesystemTreeModel::appendScannedEntries(
             childId = existing->id;
             existing->parentId = id;
             existing->name = entry.name;
-            existing->kind = entry.kind;
+            if (finalizeKinds && existing->kind != entry.kind) {
+                existing->kind = entry.kind;
+                existing->children.clear();
+                existing->totalChildCount = 0;
+                existing->directoryState =
+                    entry.kind == NodeKind::Directory
+                    ? DirectoryLoadState::Unloaded
+                    : DirectoryLoadState::Ready;
+                existing->directoryStatus =
+                    entry.kind == NodeKind::Directory
+                    ? QStringLiteral("Open this branch to scan it.")
+                    : QString();
+            }
             existing->detail = entry.detail;
             existing->isSymbolicLink = entry.isSymbolicLink;
         } else {
@@ -339,6 +375,97 @@ QVector<NodeId> FilesystemTreeModel::appendScannedEntries(
                                     : insensitive < 0;
         });
     return added;
+}
+
+QVector<RemovedTreeNode> FilesystemTreeModel::removedClosure(
+    const QVector<NodeId> &roots,
+    NodeId protectedDirectoryId) const
+{
+    QVector<RemovedTreeNode> removed;
+    QSet<NodeId> visited;
+    const std::function<void(NodeId)> visit =
+        [this, protectedDirectoryId, &removed, &visited, &visit](NodeId id) {
+            Q_ASSERT(id != rootId());
+            Q_ASSERT(id != protectedDirectoryId);
+            if (id == rootId() || id == protectedDirectoryId)
+                return;
+            if (visited.contains(id))
+                return;
+            const FileNode *entry = node(id);
+            if (!entry)
+                return;
+            visited.insert(id);
+            removed.append({.id = id, .kind = entry->kind});
+            for (const NodeId childId : entry->children) {
+                const FileNode *child = node(childId);
+                if (child && child->parentId == id)
+                    visit(childId);
+            }
+        };
+    for (const NodeId root : roots)
+        visit(root);
+    return removed;
+}
+
+void FilesystemTreeModel::pruneRemovedNodes(
+    const QVector<RemovedTreeNode> &removed,
+    NodeId fallbackDirectoryId)
+{
+    if (removed.isEmpty())
+        return;
+
+    QSet<NodeId> removedIds;
+    removedIds.reserve(removed.size());
+    for (const RemovedTreeNode &entry : removed)
+        removedIds.insert(entry.id);
+
+    for (FileNode &entry : m_nodes) {
+        entry.children.removeIf([&removedIds](NodeId childId) {
+            return removedIds.contains(childId);
+        });
+    }
+
+    if (removedIds.contains(m_scanningNodeId)) {
+        m_scanController.cancel();
+        m_scanningNodeId = InvalidNodeId;
+        m_activeScanRequest = 0;
+    }
+    if (removedIds.contains(m_contentsDirectoryId)) {
+        m_contentsDirectoryId = InvalidNodeId;
+        m_contentsModel.setDirectory(QString());
+    }
+
+    m_nodes.removeIf([&removedIds](const FileNode &entry) {
+        return removedIds.contains(entry.id);
+    });
+    reconcileDirectoryOwners(fallbackDirectoryId);
+}
+
+void FilesystemTreeModel::reconcileDirectoryOwners(
+    NodeId fallbackDirectoryId)
+{
+    const FileNode *fallback = node(fallbackDirectoryId);
+    const NodeId safeFallback = fallback && fallback->isDirectory()
+        ? fallbackDirectoryId : rootId();
+
+    const FileNode *active = node(m_activeDirectoryId);
+    if (!active || !active->isDirectory())
+        m_activeDirectoryId = safeFallback;
+
+    const FileNode *contents = node(m_contentsDirectoryId);
+    if (!contents || !contents->isDirectory()) {
+        if (m_contentsDirectoryId != InvalidNodeId)
+            m_contentsModel.setDirectory(QString());
+        m_contentsDirectoryId = InvalidNodeId;
+    }
+
+    const FileNode *scanning = node(m_scanningNodeId);
+    if (m_scanningNodeId != InvalidNodeId
+        && (!scanning || !scanning->isDirectory())) {
+        m_scanController.cancel();
+        m_scanningNodeId = InvalidNodeId;
+        m_activeScanRequest = 0;
+    }
 }
 
 void FilesystemTreeModel::updateWatchedDirectories()

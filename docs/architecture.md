@@ -61,6 +61,13 @@ the directory tree. The semantic tree retains at most 16 entries for a scanned
 directory. A generation controller ensures that only the newest navigation
 request can update the model.
 
+Terminal reconciliation reports removed nodes as a deterministic, typed
+subtree closure and erases that closure before observers run. The renderer
+combines those transient type records with its cached layout to own any brief
+departure fade; it never keeps deleted filesystem semantics alive for paint.
+Contents ownership, selection, and navigation history discard removed IDs, and
+a recreated or retyped path receives a fresh identity.
+
 The conventional Contents model holds one 64-entry page. Page cursors are based
 on the last deterministic ordering key rather than an accumulating row offset,
 so later pages do not require earlier pages to remain in memory. Each page query

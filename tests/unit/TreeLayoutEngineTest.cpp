@@ -179,6 +179,7 @@ private slots:
     void closeZoomRevealsOnlyNonOverlappingDescendants();
     void zoomClearsRearCorridorFog();
     void navigationStateTracksSelectionAndHistory();
+    void navigationStateReconcilesRemovedIds();
     void layoutProvidesConnectedBranchGeometry();
     void directChildrenUseStaggeredCorridors();
     void corridorsRemainStableWhenChildIsAdded();
@@ -1426,6 +1427,34 @@ void TreeLayoutEngineTest::navigationStateTracksSelectionAndHistory()
     QVERIFY(state.focus(1, false));
     QCOMPARE(state.focusedId(), NodeId(1));
     QCOMPARE(state.selectedId(), NodeId(1));
+}
+
+void TreeLayoutEngineTest::navigationStateReconcilesRemovedIds()
+{
+    NavigationState state(1);
+    QVERIFY(state.focus(2, true));
+    QVERIFY(state.focus(3, true));
+    QVERIFY(state.select(4));
+
+    const NavigationReconciliation selectionAndHistory =
+        state.reconcileRemoved(QSet<NodeId>({2, 4}), 1);
+    QVERIFY(!selectionAndHistory.focusChanged);
+    QVERIFY(selectionAndHistory.selectionChanged);
+    QVERIFY(selectionAndHistory.historyChanged);
+    QCOMPARE(state.focusedId(), NodeId(3));
+    QCOMPARE(state.selectedId(), NodeId(3));
+    QVERIFY(state.canGoBack());
+    QCOMPARE(state.takeBackTarget(), NodeId(1));
+
+    QVERIFY(state.focus(5, true));
+    const NavigationReconciliation focusFallback =
+        state.reconcileRemoved(QSet<NodeId>({3, 5}), 9);
+    QVERIFY(focusFallback.focusChanged);
+    QVERIFY(focusFallback.selectionChanged);
+    QVERIFY(focusFallback.historyChanged);
+    QCOMPARE(state.focusedId(), NodeId(9));
+    QCOMPARE(state.selectedId(), NodeId(9));
+    QVERIFY(!state.canGoBack());
 }
 
 void TreeLayoutEngineTest::layoutProvidesConnectedBranchGeometry()

@@ -2,7 +2,14 @@
 
 #include "FileNode.h"
 
+#include <QSet>
 #include <QVector>
+
+struct NavigationReconciliation {
+    bool focusChanged = false;
+    bool selectionChanged = false;
+    bool historyChanged = false;
+};
 
 class NavigationState
 {
@@ -16,6 +23,9 @@ public:
     bool select(NodeId id);
     bool focus(NodeId id, bool addToHistory);
     [[nodiscard]] NodeId takeBackTarget();
+    [[nodiscard]] NavigationReconciliation reconcileRemoved(
+        const QSet<NodeId> &removedIds,
+        NodeId fallbackId);
 
 private:
     QVector<NodeId> m_backHistory;
