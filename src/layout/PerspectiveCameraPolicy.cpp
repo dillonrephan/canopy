@@ -4,6 +4,24 @@
 
 #include <limits>
 
+namespace {
+qreal wheelSteps(
+    qreal angleDeltaY,
+    qreal pixelDeltaY,
+    const PerspectiveProfile &profile)
+{
+    if (angleDeltaY != 0.0 && !qIsNaN(angleDeltaY))
+        return angleDeltaY / 120.0;
+    if (pixelDeltaY != 0.0
+        && !qIsNaN(pixelDeltaY)
+        && qIsFinite(profile.touchpadPixelsPerStep)
+        && profile.touchpadPixelsPerStep > 0.0) {
+        return pixelDeltaY / profile.touchpadPixelsPerStep;
+    }
+    return 0.0;
+}
+}
+
 qreal PerspectiveTravelRange::clamp(qreal value) const
 {
     const qreal safeMinimum = qIsFinite(minimum)
@@ -42,15 +60,8 @@ qreal PerspectiveCameraPolicy::wheelTarget(
     const PerspectiveProfile &profile)
 {
     const qreal current = range.clamp(currentDepth);
-    qreal steps = 0.0;
-    if (angleDeltaY != 0.0 && !qIsNaN(angleDeltaY)) {
-        steps = angleDeltaY / 120.0;
-    } else if (pixelDeltaY != 0.0
-               && !qIsNaN(pixelDeltaY)
-               && qIsFinite(profile.touchpadPixelsPerStep)
-               && profile.touchpadPixelsPerStep > 0.0) {
-        steps = pixelDeltaY / profile.touchpadPixelsPerStep;
-    }
+    const qreal steps = wheelSteps(
+        angleDeltaY, pixelDeltaY, profile);
 
     if (qIsNaN(steps)
         || !qIsFinite(profile.wheelTravelPerStep)
@@ -59,6 +70,63 @@ qreal PerspectiveCameraPolicy::wheelTarget(
     }
     return range.clamp(
         current + steps * profile.wheelTravelPerStep);
+}
+
+PerspectiveTravelTransition PerspectiveCameraPolicy::clampTransition(
+    qreal currentDepth,
+    qreal targetDepth,
+    const PerspectiveTravelRange &range)
+{
+    return {
+        .currentDepth = range.clamp(currentDepth),
+        .targetDepth = range.clamp(targetDepth),
+    };
+}
+
+PerspectiveTravelTransition PerspectiveCameraPolicy::resetTransition(
+    const PerspectiveTravelRange &range)
+{
+    const qreal baseline = range.clamp(range.minimum);
+    return {
+        .currentDepth = baseline,
+        .targetDepth = baseline,
+    };
+}
+
+PerspectiveTravelTransition PerspectiveCameraPolicy::wheelTransition(
+    qreal currentDepth,
+    qreal pendingTargetDepth,
+    bool animationRunning,
+    qreal angleDeltaY,
+    qreal pixelDeltaY,
+    const PerspectiveTravelRange &range,
+    const PerspectiveProfile &profile)
+{
+    const PerspectiveTravelTransition clamped = clampTransition(
+        currentDepth, pendingTargetDepth, range);
+    const qreal steps = wheelSteps(
+        angleDeltaY, pixelDeltaY, profile);
+    if (qFuzzyIsNull(steps) || qIsNaN(steps))
+        return clamped;
+
+    qreal base = clamped.currentDepth;
+    const qreal pendingDelta =
+        clamped.targetDepth - clamped.currentDepth;
+    if (animationRunning
+        && !qFuzzyIsNull(pendingDelta)
+        && ((pendingDelta > 0.0) == (steps > 0.0))) {
+        base = clamped.targetDepth;
+    }
+
+    return {
+        .currentDepth = clamped.currentDepth,
+        .targetDepth = wheelTarget(
+            base,
+            angleDeltaY,
+            pixelDeltaY,
+            range,
+            profile),
+    };
 }
 
 qreal PerspectiveCameraPolicy::openSpaceTarget(

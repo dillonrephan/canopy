@@ -152,6 +152,7 @@ private slots:
     void perspectiveCameraRangeUsesCompleteWorld();
     void perspectiveTravelRangeCanonicalizesMalformedBounds();
     void perspectiveWheelTargetsAreFiniteAndClamped();
+    void perspectiveTravelTransitionsAccumulateAndReverse();
     void perspectiveOpenSpaceInvertsProjection();
     void perspectiveProjectionAnchorsFocusDuringTravel();
     void perspectiveProjectionKeepsParentContextVisible();
@@ -579,6 +580,53 @@ void TreeLayoutEngineTest::perspectiveWheelTargetsAreFiniteAndClamped()
             std::numeric_limits<qreal>::infinity(),
             malformedRange, profile);
     QVERIFY(qIsFinite(malformedTarget));
+}
+
+void TreeLayoutEngineTest::perspectiveTravelTransitionsAccumulateAndReverse()
+{
+    const PerspectiveProfile &profile =
+        ThemeRegistry::active().perspective;
+    const PerspectiveTravelRange range {
+        .minimum = 0.0,
+        .maximum = 3.0,
+    };
+
+    const PerspectiveTravelTransition accumulated =
+        PerspectiveCameraPolicy::wheelTransition(
+            0.25, 1.0, true, 120.0, 0.0, range, profile);
+    QCOMPARE(accumulated.currentDepth, qreal(0.25));
+    QCOMPARE(accumulated.targetDepth, qreal(1.5));
+
+    const PerspectiveTravelTransition reversed =
+        PerspectiveCameraPolicy::wheelTransition(
+            0.25, 1.0, true, -120.0, 0.0, range, profile);
+    QCOMPARE(reversed.currentDepth, qreal(0.25));
+    QCOMPARE(reversed.targetDepth, range.minimum);
+
+    const PerspectiveTravelTransition pixelAccumulated =
+        PerspectiveCameraPolicy::wheelTransition(
+            1.0, 1.5, true, 0.0,
+            profile.touchpadPixelsPerStep,
+            range, profile);
+    QCOMPARE(pixelAccumulated.targetDepth, qreal(2.0));
+
+    const PerspectiveTravelTransition noInput =
+        PerspectiveCameraPolicy::wheelTransition(
+            1.0, 2.0, true, 0.0, 0.0, range, profile);
+    QCOMPARE(noInput.currentDepth, qreal(1.0));
+    QCOMPARE(noInput.targetDepth, qreal(2.0));
+
+    const PerspectiveTravelTransition shrunken =
+        PerspectiveCameraPolicy::clampTransition(
+            4.0, std::numeric_limits<qreal>::infinity(),
+            {.minimum = 0.0, .maximum = 1.25});
+    QCOMPARE(shrunken.currentDepth, qreal(1.25));
+    QCOMPARE(shrunken.targetDepth, qreal(1.25));
+
+    const PerspectiveTravelTransition reset =
+        PerspectiveCameraPolicy::resetTransition(range);
+    QCOMPARE(reset.currentDepth, range.minimum);
+    QCOMPARE(reset.targetDepth, range.minimum);
 }
 
 void TreeLayoutEngineTest::perspectiveOpenSpaceInvertsProjection()

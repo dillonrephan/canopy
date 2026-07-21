@@ -34,6 +34,11 @@ class TreeSceneItem : public QQuickPaintedItem
     Q_PROPERTY(DirectoryContentsModel *contentsModel READ contentsModel CONSTANT)
     Q_PROPERTY(QString breadcrumb READ breadcrumb NOTIFY navigationChanged)
     Q_PROPERTY(qreal zoom READ zoom NOTIFY cameraChanged)
+    Q_PROPERTY(qreal travelDepth READ travelDepth NOTIFY cameraChanged)
+    Q_PROPERTY(qreal maximumTravelDepth READ maximumTravelDepth NOTIFY cameraChanged)
+    Q_PROPERTY(bool canTravelForward READ canTravelForward NOTIFY cameraChanged)
+    Q_PROPERTY(bool canTravelBackward READ canTravelBackward NOTIFY cameraChanged)
+    Q_PROPERTY(bool canResetView READ canResetView NOTIFY cameraChanged)
     Q_PROPERTY(bool perspectiveProjection READ usesPerspectiveProjection CONSTANT)
     Q_PROPERTY(bool canGoBack READ canGoBack NOTIFY navigationChanged)
     Q_PROPERTY(bool canGoUp READ canGoUp NOTIFY navigationChanged)
@@ -43,6 +48,8 @@ class TreeSceneItem : public QQuickPaintedItem
 
 public:
     explicit TreeSceneItem(QQuickItem *parent = nullptr);
+    explicit TreeSceneItem(
+        const QString &rootPath, QQuickItem *parent = nullptr);
 
     void paint(QPainter *painter) override;
 
@@ -62,6 +69,14 @@ public:
     }
     [[nodiscard]] QString breadcrumb() const;
     [[nodiscard]] qreal zoom() const noexcept { return m_zoom; }
+    [[nodiscard]] qreal travelDepth() const noexcept { return m_travelDepth; }
+    [[nodiscard]] qreal maximumTravelDepth() const noexcept
+    {
+        return m_maximumTravelDepth;
+    }
+    [[nodiscard]] bool canTravelForward() const noexcept;
+    [[nodiscard]] bool canTravelBackward() const noexcept;
+    [[nodiscard]] bool canResetView() const noexcept;
     [[nodiscard]] bool usesPerspectiveProjection() const;
     [[nodiscard]] bool canGoBack() const noexcept { return m_navigation.canGoBack(); }
     [[nodiscard]] bool canGoUp() const;
@@ -75,6 +90,8 @@ public:
     [[nodiscard]] QString pathMessage() const { return m_pathMessage; }
 
     Q_INVOKABLE void resetView();
+    Q_INVOKABLE void travelForward();
+    Q_INVOKABLE void travelBackward();
     Q_INVOKABLE void goBack();
     Q_INVOKABLE void goUp();
     Q_INVOKABLE void focusSelected();
@@ -118,8 +135,14 @@ private:
     void openFile(const QString &path);
     void setPathMessage(const QString &message);
     void zoomAt(const QPointF &viewPosition, qreal factor, bool recenter);
+    [[nodiscard]] PerspectiveTravelRange perspectiveTravelRange() const;
+    void finishTransientAnimationsForTravel();
+    void freezePerspectiveTravel();
+    void resetPerspectiveTravel();
+    void startPerspectiveTravel(qreal targetDepth);
+    void applyPerspectiveWheel(qreal angleDeltaY, qreal pixelDeltaY);
     void applyTreeChange(const TreeChangeSet &change);
-    void relayout();
+    void relayout(bool notifyPerspectiveCameraChange = true);
 
     FilesystemTreeModel m_filesystemModel;
     QVector<LayoutNode> m_layout;
@@ -134,6 +157,7 @@ private:
     QVariantAnimation m_focusAnimation;
     QVariantAnimation m_liveChangeAnimation;
     QVariantAnimation m_cameraAnimation;
+    QVariantAnimation m_travelAnimation;
     QPointF m_pan {120.0, 35.0};
     QPointF m_cameraStartPan;
     QPointF m_cameraTargetPan;
@@ -142,6 +166,10 @@ private:
     qreal m_zoom = 1.0;
     qreal m_cameraStartZoom = 1.0;
     qreal m_cameraTargetZoom = 1.0;
+    qreal m_travelDepth = 0.0;
+    qreal m_travelStartDepth = 0.0;
+    qreal m_travelTargetDepth = 0.0;
+    qreal m_maximumTravelDepth = 0.0;
     qreal m_transitionProgress = 1.0;
     qreal m_liveChangeProgress = 1.0;
     NodeId m_hovered = InvalidNodeId;

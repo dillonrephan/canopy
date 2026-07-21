@@ -108,9 +108,9 @@ corridor checkpoint.
 - [x] extract the current Sakura profile without changing behavior
 - [x] separate stable world layout from screen projection
 - [x] retain the planar renderer as a reference projection
-- [ ] add perspective camera and projected hit geometry
-- [ ] replace line branches with tapered trunk and corridor surfaces
-- [ ] render six foreground corridors and two distant fog hints
+- [x] add perspective camera and projected hit geometry
+- [x] replace line branches with tapered trunk and corridor surfaces
+- [x] render six foreground corridors and two distant fog hints
 - [ ] validate camera travel, live changes, backtracking, and reduced motion
 
 The detailed boundaries and commit sequence live in

@@ -125,18 +125,20 @@ Focus changes advance the selected corridor while obsolete siblings recede and
 newly revealed children grow from their attachment points. Live create, rename,
 and delete changes use the same grow/fade vocabulary. Completed fades are
 discarded and cannot participate in hit testing; reduced-motion mode skips all
-transient geometry. Zoom progressively restores rear-corridor opacity, while a
-blank-space double-click recenters and advances the camera into that region.
-This reveals already materialized geometry without weakening the hard
-filesystem presentation bound.
+transient geometry. The planar reference keeps pan, cursor-centered zoom, and
+blank-space recentering. Perspective uses a separate bounded travel depth;
+wheel/touchpad input and blank-space double-click reproject the stable world
+through that camera without weakening the hard filesystem presentation bound.
 
 QML overlays remain appropriate for conventional controls and the inspector.
 
 ### Navigation state
 
 A small controller owns the focused node, back/forward history, parent
-navigation, current selection, pan/zoom state, and reduced-motion behavior. It
-coordinates model, layout, and UI without absorbing their responsibilities.
+navigation, and current selection. The scene owns two deliberately separate
+view paths: planar pan/zoom and bounded perspective travel, plus their
+reduced-motion behavior. Together they coordinate model, layout, and UI without
+absorbing their responsibilities.
 
 Direct paths resolve to semantic directory nodes before focus changes, including
 nodes outside the currently materialized sample. Directory rows and branches

@@ -31,7 +31,14 @@ QPainterPath staticBranchPath(const LayoutNode &layout)
 }
 
 TreeSceneItem::TreeSceneItem(QQuickItem *parent)
-    : QQuickPaintedItem(parent)
+    : TreeSceneItem(QDir::homePath(), parent)
+{
+}
+
+TreeSceneItem::TreeSceneItem(
+    const QString &rootPath, QQuickItem *parent)
+    : QQuickPaintedItem(parent),
+      m_filesystemModel(rootPath)
 {
     const ThemeProfile &theme = ThemeRegistry::active();
     setAcceptedMouseButtons(Qt::LeftButton | Qt::MiddleButton);
@@ -84,6 +91,26 @@ TreeSceneItem::TreeSceneItem(QQuickItem *parent)
                 update();
                 emit cameraChanged();
             });
+    m_travelAnimation.setDuration(theme.motion.cameraDuration);
+    m_travelAnimation.setStartValue(0.0);
+    m_travelAnimation.setEndValue(1.0);
+    m_travelAnimation.setEasingCurve(theme.motion.cameraEasing);
+    connect(&m_travelAnimation, &QVariantAnimation::valueChanged, this,
+            [this](const QVariant &value) {
+                const qreal progress = value.toReal();
+                m_travelDepth = perspectiveTravelRange().clamp(
+                    m_travelStartDepth
+                    + (m_travelTargetDepth - m_travelStartDepth)
+                        * progress);
+                relayout(false);
+                emit cameraChanged();
+            });
+    connect(&m_travelAnimation, &QVariantAnimation::finished, this, [this] {
+        m_travelDepth = perspectiveTravelRange().clamp(
+            m_travelTargetDepth);
+        m_travelStartDepth = m_travelDepth;
+        m_travelTargetDepth = m_travelDepth;
+    });
     connect(&m_filesystemModel, &FilesystemTreeModel::treeChanged,
             this, [this](const TreeChangeSet &change) {
                 if (!change.added.isEmpty() || !change.removed.isEmpty())
@@ -448,6 +475,30 @@ bool TreeSceneItem::canGoUp() const
     return focused && focused->parentId != InvalidNodeId;
 }
 
+bool TreeSceneItem::canTravelForward() const noexcept
+{
+    return usesPerspectiveProjection()
+        && m_travelDepth < m_maximumTravelDepth
+        && !qFuzzyCompare(
+            1.0 + m_travelDepth,
+            1.0 + m_maximumTravelDepth);
+}
+
+bool TreeSceneItem::canTravelBackward() const noexcept
+{
+    return usesPerspectiveProjection()
+        && m_travelDepth > 0.0
+        && !qFuzzyIsNull(m_travelDepth);
+}
+
+bool TreeSceneItem::canResetView() const noexcept
+{
+    if (usesPerspectiveProjection())
+        return canTravelBackward();
+    return m_pan != QPointF(120.0, 35.0)
+        || !qFuzzyCompare(m_zoom, 1.0);
+}
+
 void TreeSceneItem::setReducedMotion(bool reducedMotion)
 {
     if (m_reducedMotion == reducedMotion)
@@ -464,6 +515,17 @@ void TreeSceneItem::setReducedMotion(bool reducedMotion)
         m_cameraAnimation.stop();
         m_pan = m_cameraTargetPan;
         m_zoom = m_cameraTargetZoom;
+    }
+    if (reducedMotion
+        && m_travelAnimation.state() == QAbstractAnimation::Running) {
+        const qreal pendingTarget = perspectiveTravelRange().clamp(
+            m_travelTargetDepth);
+        m_travelAnimation.stop();
+        m_travelDepth = pendingTarget;
+        m_travelStartDepth = pendingTarget;
+        m_travelTargetDepth = pendingTarget;
+        relayout(false);
+        emit cameraChanged();
     }
     m_transitionProgress = 1.0;
     m_liveChangeProgress = 1.0;
@@ -487,13 +549,27 @@ void TreeSceneItem::setShowHidden(bool showHidden)
 
 void TreeSceneItem::resetView()
 {
-    if (usesPerspectiveProjection())
+    if (usesPerspectiveProjection()) {
+        startPerspectiveTravel(0.0);
         return;
+    }
     m_cameraAnimation.stop();
     m_pan = QPointF(120.0, 35.0);
     m_zoom = 1.0;
     update();
     emit cameraChanged();
+}
+
+void TreeSceneItem::travelForward()
+{
+    if (usesPerspectiveProjection())
+        applyPerspectiveWheel(120.0, 0.0);
+}
+
+void TreeSceneItem::travelBackward()
+{
+    if (usesPerspectiveProjection())
+        applyPerspectiveWheel(-120.0, 0.0);
 }
 
 void TreeSceneItem::goBack()
@@ -574,7 +650,10 @@ void TreeSceneItem::hoverLeaveEvent(QHoverEvent *)
 
 void TreeSceneItem::mousePressEvent(QMouseEvent *event)
 {
+    forceActiveFocus(Qt::MouseFocusReason);
     m_cameraAnimation.stop();
+    if (usesPerspectiveProjection())
+        freezePerspectiveTravel();
     m_lastPointer = event->position();
     const NodeId hit = nodeAt(event->position());
     if (usesPerspectiveProjection()
@@ -604,6 +683,14 @@ void TreeSceneItem::mouseDoubleClickEvent(QMouseEvent *event)
             openFile(entry->path);
     } else {
         if (usesPerspectiveProjection()) {
+            const qreal targetDepth =
+                PerspectiveCameraPolicy::openSpaceTarget(
+                    m_travelDepth,
+                    event->position().y(),
+                    {width(), height()},
+                    perspectiveTravelRange(),
+                    ThemeRegistry::active().perspective);
+            startPerspectiveTravel(targetDepth);
             event->accept();
             return;
         }
@@ -640,6 +727,8 @@ void TreeSceneItem::mouseReleaseEvent(QMouseEvent *event)
 void TreeSceneItem::wheelEvent(QWheelEvent *event)
 {
     if (usesPerspectiveProjection()) {
+        applyPerspectiveWheel(
+            event->angleDelta().y(), event->pixelDelta().y());
         event->accept();
         return;
     }
@@ -680,6 +769,111 @@ void TreeSceneItem::zoomAt(
     m_pan = nextPan;
     update();
     emit cameraChanged();
+}
+
+PerspectiveTravelRange TreeSceneItem::perspectiveTravelRange() const
+{
+    return {
+        .minimum = 0.0,
+        .maximum = m_maximumTravelDepth,
+    };
+}
+
+void TreeSceneItem::finishTransientAnimationsForTravel()
+{
+    m_focusAnimation.stop();
+    m_liveChangeAnimation.stop();
+    m_transitionProgress = 1.0;
+    m_liveChangeProgress = 1.0;
+    m_previousPositions.clear();
+    m_livePreviousPositions.clear();
+    m_enteringNodes.clear();
+    m_liveEnteringNodes.clear();
+    m_departingLayout.clear();
+    m_liveDepartingLayout.clear();
+    update();
+}
+
+void TreeSceneItem::freezePerspectiveTravel()
+{
+    if (m_travelAnimation.state() != QAbstractAnimation::Running)
+        return;
+    m_travelAnimation.stop();
+    m_travelDepth = perspectiveTravelRange().clamp(m_travelDepth);
+    m_travelStartDepth = m_travelDepth;
+    m_travelTargetDepth = m_travelDepth;
+}
+
+void TreeSceneItem::resetPerspectiveTravel()
+{
+    m_travelAnimation.stop();
+    const PerspectiveTravelTransition reset =
+        PerspectiveCameraPolicy::resetTransition(
+            perspectiveTravelRange());
+    m_travelDepth = reset.currentDepth;
+    m_travelStartDepth = reset.currentDepth;
+    m_travelTargetDepth = reset.targetDepth;
+}
+
+void TreeSceneItem::startPerspectiveTravel(qreal targetDepth)
+{
+    const qreal target = perspectiveTravelRange().clamp(targetDepth);
+    if (m_travelAnimation.state() == QAbstractAnimation::Running
+        && qFuzzyCompare(1.0 + target, 1.0 + m_travelTargetDepth)) {
+        return;
+    }
+    if (m_travelAnimation.state() != QAbstractAnimation::Running
+        && qFuzzyCompare(1.0 + target, 1.0 + m_travelDepth)) {
+        return;
+    }
+
+    m_travelAnimation.stop();
+    m_travelDepth = perspectiveTravelRange().clamp(m_travelDepth);
+    m_travelStartDepth = m_travelDepth;
+    m_travelTargetDepth = m_travelDepth;
+    if (qFuzzyCompare(1.0 + target, 1.0 + m_travelDepth))
+        return;
+
+    finishTransientAnimationsForTravel();
+    m_travelTargetDepth = target;
+    if (m_reducedMotion) {
+        m_travelDepth = target;
+        m_travelStartDepth = target;
+        m_travelTargetDepth = target;
+        relayout(false);
+        emit cameraChanged();
+        return;
+    }
+    m_travelAnimation.start();
+}
+
+void TreeSceneItem::applyPerspectiveWheel(
+    qreal angleDeltaY, qreal pixelDeltaY)
+{
+    const bool running =
+        m_travelAnimation.state() == QAbstractAnimation::Running;
+    const PerspectiveTravelTransition transition =
+        PerspectiveCameraPolicy::wheelTransition(
+            m_travelDepth,
+            m_travelTargetDepth,
+            running,
+            angleDeltaY,
+            pixelDeltaY,
+            perspectiveTravelRange(),
+            ThemeRegistry::active().perspective);
+    if (running
+        && qFuzzyCompare(
+            1.0 + transition.targetDepth,
+            1.0 + m_travelTargetDepth)) {
+        return;
+    }
+    if (!running
+        && qFuzzyCompare(
+            1.0 + transition.targetDepth,
+            1.0 + m_travelDepth)) {
+        return;
+    }
+    startPerspectiveTravel(transition.targetDepth);
 }
 
 NodeId TreeSceneItem::nodeAt(const QPointF &viewPosition) const
@@ -891,7 +1085,15 @@ void TreeSceneItem::focusNode(NodeId id, bool addToHistory)
         return;
     }
 
-    m_focusAnimation.stop();
+    const bool perspective = usesPerspectiveProjection();
+    const qreal previousTravelDepth = m_travelDepth;
+    const qreal previousMaximumTravelDepth = m_maximumTravelDepth;
+    if (perspective) {
+        freezePerspectiveTravel();
+        finishTransientAnimationsForTravel();
+    } else {
+        m_focusAnimation.stop();
+    }
     m_departingLayout.clear();
     m_enteringNodes.clear();
     m_previousPositions.clear();
@@ -899,7 +1101,18 @@ void TreeSceneItem::focusNode(NodeId id, bool addToHistory)
         m_previousPositions.insert(layout.id, drawnPosition(layout));
     const QVector<LayoutNode> previousLayout = m_layout;
     m_navigation.focus(id, addToHistory);
-    relayout();
+    if (perspective)
+        resetPerspectiveTravel();
+    relayout(false);
+    if (perspective
+        && (!qFuzzyCompare(
+                1.0 + previousTravelDepth,
+                1.0 + m_travelDepth)
+            || !qFuzzyCompare(
+                1.0 + previousMaximumTravelDepth,
+                1.0 + m_maximumTravelDepth))) {
+        emit cameraChanged();
+    }
 
     QSet<NodeId> currentIds;
     currentIds.reserve(m_layout.size());
@@ -915,7 +1128,8 @@ void TreeSceneItem::focusNode(NodeId id, bool addToHistory)
         m_previousPositions.insert(layout.id, layout.branchStart);
         m_enteringNodes.insert(layout.id);
     }
-    resetView();
+    if (!perspective)
+        resetView();
 
     if (m_reducedMotion) {
         m_transitionProgress = 1.0;
@@ -956,6 +1170,9 @@ void TreeSceneItem::applyTreeChange(const TreeChangeSet &change)
     m_liveEnteringNodes.clear();
     m_liveDepartingLayout.clear();
 
+    if (usesPerspectiveProjection())
+        freezePerspectiveTravel();
+
     const QVector<LayoutNode> previousLayout = m_layout;
     relayout();
 
@@ -987,17 +1204,44 @@ void TreeSceneItem::applyTreeChange(const TreeChangeSet &change)
     m_liveChangeAnimation.start();
 }
 
-void TreeSceneItem::relayout()
+void TreeSceneItem::relayout(bool notifyPerspectiveCameraChange)
 {
+    bool perspectiveCameraChanged = false;
+    if (usesPerspectiveProjection()) {
+        const qreal previousMaximum = m_maximumTravelDepth;
+        m_maximumTravelDepth = m_layoutEngine.perspectiveTravelRange(
+            m_filesystemModel.nodes(),
+            m_navigation.focusedId()).maximum;
+        const PerspectiveTravelTransition clamped =
+            PerspectiveCameraPolicy::clampTransition(
+                m_travelDepth,
+                m_travelTargetDepth,
+                perspectiveTravelRange());
+        const qreal clampedStart = perspectiveTravelRange().clamp(
+            m_travelStartDepth);
+        perspectiveCameraChanged =
+            !qFuzzyCompare(1.0 + previousMaximum,
+                           1.0 + m_maximumTravelDepth)
+            || !qFuzzyCompare(1.0 + m_travelDepth,
+                              1.0 + clamped.currentDepth)
+            || !qFuzzyCompare(1.0 + m_travelTargetDepth,
+                              1.0 + clamped.targetDepth);
+        m_travelDepth = clamped.currentDepth;
+        m_travelStartDepth = clampedStart;
+        m_travelTargetDepth = clamped.targetDepth;
+    }
     const ViewState view {
         .pan = m_pan,
         .viewport = {width(), height()},
-        .zoom = m_zoom
+        .zoom = m_zoom,
+        .travelDepth = m_travelDepth,
     };
     m_layout = m_layoutEngine.layout(
         m_filesystemModel.nodes(), m_navigation.focusedId(), view);
     m_hovered = InvalidNodeId;
     update();
+    if (perspectiveCameraChanged && notifyPerspectiveCameraChange)
+        emit cameraChanged();
 }
 
 bool TreeSceneItem::usesPerspectiveProjection() const

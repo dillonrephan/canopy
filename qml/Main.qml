@@ -138,15 +138,73 @@ ApplicationWindow {
                 font.pixelSize: 12
             }
 
+            ToolButton {
+                id: travelBackButton
+                text: "−"
+                visible: tree.perspectiveProjection
+                enabled: tree.canTravelBackward
+                Accessible.name: "Travel backward"
+                ToolTip.visible: hovered
+                ToolTip.text: "Travel backward (Page Up)"
+                onClicked: tree.travelBackward()
+
+                background: Rectangle {
+                    implicitWidth: 34
+                    implicitHeight: 34
+                    radius: 11
+                    color: travelBackButton.down ? Theme.selection
+                        : travelBackButton.hovered ? Theme.raisedSurface
+                                                   : "transparent"
+                    border.color: travelBackButton.hovered
+                                  ? Theme.border : "transparent"
+                }
+            }
+
+            Label {
+                visible: tree.perspectiveProjection
+                text: "Depth " + tree.travelDepth.toFixed(1) + " / "
+                      + tree.maximumTravelDepth.toFixed(1)
+                color: Theme.textDark
+                opacity: 0.68
+                font.pixelSize: 11
+                Accessible.name: text
+            }
+
+            ToolButton {
+                id: travelForwardButton
+                text: "+"
+                visible: tree.perspectiveProjection
+                enabled: tree.canTravelForward
+                Accessible.name: "Travel forward"
+                ToolTip.visible: hovered
+                ToolTip.text: "Travel forward (Page Down)"
+                onClicked: tree.travelForward()
+
+                background: Rectangle {
+                    implicitWidth: 34
+                    implicitHeight: 34
+                    radius: 11
+                    color: travelForwardButton.down ? Theme.selection
+                        : travelForwardButton.hovered ? Theme.raisedSurface
+                                                      : "transparent"
+                    border.color: travelForwardButton.hovered
+                                  ? Theme.border : "transparent"
+                }
+            }
+
             Button {
                 id: resetButton
                 text: "Reset view"
-                visible: !tree.perspectiveProjection
+                enabled: !tree.perspectiveProjection || tree.canResetView
+                Accessible.name: "Reset view"
+                ToolTip.visible: hovered
+                ToolTip.text: "Reset view (Ctrl+0)"
                 onClicked: tree.resetView()
 
                 contentItem: Label {
                     text: resetButton.text
                     color: resetButton.down ? Theme.textLight : Theme.textDark
+                    opacity: resetButton.enabled ? 1 : 0.36
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
@@ -175,6 +233,7 @@ ApplicationWindow {
             TreeScene {
                 id: tree
                 anchors.fill: parent
+                focus: true
                 reducedMotion: reducedMotion.checked
                 onSelectionChanged: {
                     inspectorTabs.currentIndex = tree.selectedRequiresContents ? 1 : 0
@@ -194,7 +253,7 @@ ApplicationWindow {
                 anchors.left: parent.left
                 anchors.bottom: parent.bottom
                 anchors.margins: 18
-                width: instruction.implicitWidth + 24
+                width: Math.min(parent.width - 36, 620)
                 height: instruction.implicitHeight + 16
                 radius: 10
                 color: Theme.raisedSurface
@@ -202,13 +261,16 @@ ApplicationWindow {
 
                 Label {
                     id: instruction
-                    anchors.centerIn: parent
+                    anchors.fill: parent
+                    anchors.margins: 8
                     text: tree.perspectiveProjection
-                          ? "Click to inspect  •  double-click a branch to enter  •  depth travel is coming next"
+                          ? "Scroll to travel  •  Page Up/Down to step  •  double-click space to move  •  double-click branch to enter"
                           : "Scroll to zoom  •  drag to pan  •  click to inspect  •  double-click a branch to enter, or open space to travel"
                     color: Theme.textDark
                     opacity: 0.78
                     font.pixelSize: 12
+                    wrapMode: Text.Wrap
+                    verticalAlignment: Text.AlignVCenter
                 }
             }
         }
@@ -672,6 +734,28 @@ ApplicationWindow {
         sequence: "Alt+Up"
         enabled: tree.canGoUp
         onActivated: tree.goUp()
+    }
+
+    Shortcut {
+        sequence: "PageDown"
+        enabled: tree.activeFocus
+                 && tree.perspectiveProjection
+                 && tree.canTravelForward
+        onActivated: tree.travelForward()
+    }
+
+    Shortcut {
+        sequence: "PageUp"
+        enabled: tree.activeFocus
+                 && tree.perspectiveProjection
+                 && tree.canTravelBackward
+        onActivated: tree.travelBackward()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+0"
+        enabled: !tree.perspectiveProjection || tree.canResetView
+        onActivated: tree.resetView()
     }
 
     Component.onCompleted: {

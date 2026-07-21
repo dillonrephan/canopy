@@ -142,7 +142,12 @@ Each numbered stage should be a coherent, buildable commit:
    root/non-root scene cardinality is strictly bounded, reversal restores exact
    membership and geometry, and Contents reports every unprojected direct
    entry without changing planar/core presentation semantics.
-8. Convert wheel and open-space travel from canvas scaling to camera movement.
+8. **Complete in code; visual validation pending:** Convert wheel, touchpad,
+   keyboard, controls, reset, and open-space double-click from canvas scaling
+   to bounded camera movement. Perspective current/start/target/range state and
+   animation remain independent of planar pan/zoom. Focus resets to baseline,
+   live changes preserve and clamp the current view, and reduced motion snaps
+   to the pending target.
 9. Test live additions, removals, focus transitions, reduced motion, crowded
    directories, and backtracking under both projections.
 10. Decide whether Sakura Perspective replaces Sakura Morning or remains a

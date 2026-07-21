@@ -127,6 +127,44 @@ if(BUILD_TESTING)
         NAME canopy_directory_scanner_tests
         COMMAND canopy_directory_scanner_tests
     )
+
+    qt_add_executable(canopy_tree_scene_tests
+        tests/unit/TreeSceneItemTest.cpp
+        src/layout/TreeLayoutEngine.cpp
+        src/layout/PlanarProjection.cpp
+        src/layout/PerspectiveProjection.cpp
+        src/layout/PerspectiveCameraPolicy.cpp
+        src/layout/PerspectivePresentationPolicy.cpp
+        src/layout/WorldLayoutEngine.cpp
+        src/filesystem/DirectoryContentsModel.cpp
+        src/filesystem/DirectoryScanController.cpp
+        src/filesystem/DirectoryScanner.cpp
+        src/model/DirectoryPresentationPolicy.cpp
+        src/model/FilesystemTreeModel.cpp
+        src/navigation/NavigationState.cpp
+        src/rendering/LabelVisibilityPolicy.cpp
+        src/rendering/TreeSceneItem.cpp
+        src/theme/ThemeRegistry.cpp
+        src/themes/sakura/SakuraMorningTheme.cpp
+    )
+    target_include_directories(canopy_tree_scene_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/layout
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/filesystem
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/model
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/navigation
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/rendering
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/theme
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/themes/sakura
+    )
+    target_link_libraries(canopy_tree_scene_tests PRIVATE
+        Qt6::Concurrent
+        Qt6::Quick
+        Qt6::Test
+    )
+    add_test(NAME canopy_tree_scene_tests COMMAND canopy_tree_scene_tests)
+    set_tests_properties(canopy_tree_scene_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    )
 endif()
 
 install(TARGETS canopy

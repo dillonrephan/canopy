@@ -40,9 +40,10 @@ check `avahi-daemon.socket`; the existing Toolbx binds that host socket.
   and resolvable focus departures use opacity without interpolating endpoints,
   so painted and hit geometry cannot diverge. Live-removal departure remains
   unresolved; full projected-surface interpolation is deferred.
-- Legacy pan, wheel zoom, blank-space zoom, and reset are explicit no-ops in
-  perspective mode until camera travel is implemented. The planar input and
-  transform paths remain unchanged.
+- Perspective travel has dedicated current/start/target/range state and its own
+  animation. Wheel/touchpad input, Page Up/Down, compact controls, reset, and
+  blank-space double-click all drive bounded reprojection; planar input and
+  transform state remain unchanged.
 - `PerspectivePresentationPolicy` now owns the pure camera-ahead presentation
   window and Contents arithmetic. Perspective projects at most six foreground
   direct children plus two fog hints, projects no descendants, and retains at
@@ -57,7 +58,7 @@ check `avahi-daemon.socket`; the existing Toolbx binds that host socket.
 - The full build, QML lint, and test suite passed, and the final isolated frame
   was inspected at `/tmp/canopy-stage7-budget-final-verified.png`.
 
-## Active task: convert perspective input to camera travel
+## Active task: validate perspective camera travel
 
 Perspective math and renderer dispatch are now locked by tests:
 
@@ -92,7 +93,6 @@ Stage 6 is complete:
   first, followed by exact padded surface geometry in reverse depth order.
 - The final frame showed a centered broad trunk, readable tapered corridors,
   correct near-over-far occlusion, and usable labels without planar transforms.
-- Perspective input hints state that depth travel is not active yet.
 
 Stage 7 is complete:
 
@@ -105,14 +105,25 @@ Stage 7 is complete:
 - The inspected 29-entry frame stayed bounded and reported `+21 more in
   Contents`, exactly 29 known entries minus eight projected direct children.
 
-Before implementing camera input:
+Stage 8 is complete in code and awaiting visual validation:
 
-- Define the travel-depth range and wheel sensitivity without reusing planar
-  zoom state.
-- Reproject continuously from `ViewState::travelDepth`; preserve the tested
-  camera-ahead window and exact reversal behavior.
-- Replace the temporary perspective input no-ops and update the footer only
-  when travel is functional.
+- Travel range is recomputed from complete stable world layout on focus, live
+  changes, and resize; current and pending depths clamp deterministically.
+- Same-direction wheel events accumulate on the pending target. Opposite input
+  reverses from the current rendered depth, pointer press freezes there, and
+  boundary no-ops do not interrupt an animation.
+- Focus/back/up/path navigation starts the new focus at depth zero. Live changes
+  preserve the current viewpoint, and reduced motion snaps to the pending
+  bounded target, including when enabled mid-animation.
+- Page Up/Down, header controls, Ctrl+0, wheel/touchpad input, and open-space
+  double-click expose the same bounded policy without reusing planar camera
+  state.
+- Pure policy tests cover accumulation, reversal, pixel fallback, resets, range
+  shrinkage, malformed values, and projection inversion. The full build, QML
+  lint, and unit suite pass without launching either display path.
+
+Before visual validation:
+
 - Direct `TreeSceneItem` paint/hit layering still lacks its own unit harness;
   keep the existing shared-label and two-pass implementation small.
 - Decide how projected surfaces interpolate during focus/live transitions;
