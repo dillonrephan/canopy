@@ -23,7 +23,7 @@ check `avahi-daemon.socket`; the existing Toolbx binds that host socket.
 
 ## Current checkpoint
 
-- Active branch: `visual/perspective-sakura`
+- Active validation branch: `codex/perspective-qml-controls-test`
 - Stable planar rollback tag: `checkpoint/planar-fog-navigation`
 - World/planar separation tag: `checkpoint/world-planar-separation`
 - The modular Sakura profile, stable world placement, and planar projection are
@@ -55,8 +55,10 @@ check `avahi-daemon.socket`; the existing Toolbx binds that host socket.
   incomplete-directory state without changing the core/planar 16-entry policy.
   The focus badge subtracts projected direct children from the greater of known
   total and materialized direct-child count.
-- The full build, QML lint, and test suite passed, and the final isolated frame
-  was inspected at `/tmp/canopy-stage7-budget-final-verified.png`.
+- The full build, QML lint, and test suite pass in both the perspective
+  worktree and a detached planar rollback worktree. The planar tag also starts
+  successfully against the crowded fixture and retains its bounded 16-entry
+  presentation.
 
 ## Active task: validate perspective camera travel
 
@@ -105,8 +107,8 @@ Stage 7 is complete:
 - The inspected 29-entry frame stayed bounded and reported `+21 more in
   Contents`, exactly 29 known entries minus eight projected direct children.
 
-Stage 8 is complete in code with deterministic offscreen renderer validation;
-an isolated end-to-end input sweep remains:
+Stage 8 is complete in code with deterministic offscreen renderer validation
+and a partial Fedora Plasma compositor sweep:
 
 - Travel range is recomputed from complete stable world layout on focus, live
   changes, and resize; current and pending depths clamp deterministically.
@@ -129,18 +131,30 @@ an isolated end-to-end input sweep remains:
   Up, Page Down, and Ctrl+0 shortcut handlers drive the real scene controller.
   It does not claim physical keyboard, wheel, or touchpad delivery through a
   compositor.
+- A Fedora guest-native Toolbx build passed configure, build, QML lint, and all
+  three test executables. On the real Plasma session, pointer activation of the
+  forward and reset controls changed and reset depth, reduced motion snapped to
+  the same bounded half-step, Ctrl+L focused and selected the path field, and a
+  35-entry directory remained bounded at eight projected entries.
+- Live creation and removal changed the same running view from 35 to 36 and
+  back to 35 entries, with overflow changing from `+27` to `+28` and back.
+- The compositor sweep exposed a real focus defect: Page Up/Down shortcuts were
+  disabled whenever the tree did not own active focus. They are now enabled
+  outside path editing and covered by the production-QML test; editing the path
+  still suppresses travel shortcuts.
 - Stage 9 validation also locks exact live-scan deltas and the planar
   reduced-motion camera notification. Unchanged scan survivors are no longer
   reported as new arrivals at reconciliation.
 
 Remaining Stage 9 validation:
 
-- Complete an isolated interactive sweep of wheel/touchpad, Page Up/Down,
-  visible controls, reset, open-space travel, and focus/backtracking. The
-  startup frame and QML control/shortcut-handler wiring are automated;
-  compositor-level keyboard delivery, real wheel/touchpad input, and the
-  complete interaction sequence still require hands-on evidence. Synthetic
-  key delivery was inconclusive and is not counted as passing evidence.
+- Complete the remaining hands-on sweep of a real wheel/touchpad, Page Up/Down,
+  open-space double-click travel, branch focus/backtracking, visible keyboard
+  focus, and assistive-technology exposure. The startup frame, production-QML
+  handlers, visible controls, reset, reduced motion, crowded bounds, Ctrl+L,
+  and live add/remove are covered. QMP synthetic Page Down, wheel, double-click,
+  and Tab delivery was inconclusive and is not counted as passing evidence;
+  touchpad pixel-delta behavior and AT-SPI scene-node exposure remain untested.
 - Decide how projected surfaces interpolate during focus/live transitions;
   preserve the current atomic geometry fallback until paint and hit can derive
   from one interpolated path.
