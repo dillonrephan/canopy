@@ -27,6 +27,8 @@ qt_add_qml_module(canopy
         src/layout/PlanarProjection.h
         src/layout/PerspectiveProjection.cpp
         src/layout/PerspectiveProjection.h
+        src/layout/PerspectivePresentationPolicy.cpp
+        src/layout/PerspectivePresentationPolicy.h
         src/layout/ProjectedNode.h
         src/layout/ViewState.h
         src/layout/WorldLayout.h
@@ -82,6 +84,7 @@ if(BUILD_TESTING)
         src/layout/TreeLayoutEngine.cpp
         src/layout/PlanarProjection.cpp
         src/layout/PerspectiveProjection.cpp
+        src/layout/PerspectivePresentationPolicy.cpp
         src/layout/WorldLayoutEngine.cpp
         src/model/DirectoryPresentationPolicy.cpp
         src/model/FakeTreeData.cpp

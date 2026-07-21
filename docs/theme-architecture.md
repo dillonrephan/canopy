@@ -137,7 +137,11 @@ Each numbered stage should be a coherent, buildable commit:
    geometry after a higher-priority visible-label/endpoint pass. Focus/live
    geometry switches atomically with opacity-only arrival at this stage so
    animated paint and hit endpoints cannot diverge.
-7. Enforce the six-foreground plus two-fog presentation budget.
+7. **Complete:** Enforce a camera-ahead window of six foreground direct-child
+   corridors plus two hittable fog hints. Perspective descendants are omitted,
+   root/non-root scene cardinality is strictly bounded, reversal restores exact
+   membership and geometry, and Contents reports every unprojected direct
+   entry without changing planar/core presentation semantics.
 8. Convert wheel and open-space travel from canvas scaling to camera movement.
 9. Test live additions, removals, focus transitions, reduced motion, crowded
    directories, and backtracking under both projections.

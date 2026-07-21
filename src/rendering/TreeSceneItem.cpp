@@ -2,6 +2,7 @@
 
 #include "DirectoryPresentationPolicy.h"
 #include "LabelVisibilityPolicy.h"
+#include "PerspectivePresentationPolicy.h"
 #include "ThemeRegistry.h"
 
 #include <QColor>
@@ -418,7 +419,13 @@ qulonglong TreeSceneItem::selectedMaterializedChildCount() const
 bool TreeSceneItem::selectedRequiresContents() const
 {
     const FileNode *selected = node(m_navigation.selectedId());
-    return selected && DirectoryPresentationPolicy::evaluate(*selected)
+    if (!selected)
+        return false;
+    if (usesPerspectiveProjection()) {
+        return PerspectivePresentationPolicy::requiresContents(
+            *selected, ThemeRegistry::active().perspective);
+    }
+    return DirectoryPresentationPolicy::evaluate(*selected)
         .usesContentsFallback;
 }
 
@@ -678,13 +685,17 @@ void TreeSceneItem::zoomAt(
 NodeId TreeSceneItem::nodeAt(const QPointF &viewPosition) const
 {
     const QPointF scenePosition = toScene(viewPosition);
-    const auto isHittable = [this](const LayoutNode &layout) {
+    const qreal minimumHitOpacity = usesPerspectiveProjection()
+        ? ThemeRegistry::active().perspective.minimumHitOpacity
+        : 0.28;
+    const auto isHittable = [this, minimumHitOpacity](
+                                const LayoutNode &layout) {
         return node(layout.id)
             && !(m_enteringNodes.contains(layout.id)
                  && m_transitionProgress < 0.35)
             && !(m_liveEnteringNodes.contains(layout.id)
                  && m_liveChangeProgress < 0.35)
-            && layout.depthOpacity >= 0.28;
+            && layout.depthOpacity >= minimumHitOpacity;
     };
 
     if (usesPerspectiveProjection()) {

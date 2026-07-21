@@ -1,5 +1,6 @@
 #include "PerspectiveProjection.h"
 
+#include "PerspectivePresentationPolicy.h"
 #include "ThemeRegistry.h"
 
 #include <QHash>
@@ -150,45 +151,17 @@ QVector<ProjectedNode> PerspectiveProjection::project(
     const PerspectiveProfile &profile = theme.perspective;
     const LabelStyle &labels = theme.labels;
     QHash<NodeId, WorldPoint> worldPoints;
-    QVector<const WorldNodePlacement *> directChildren;
-    for (const WorldNodePlacement &placement : world.nodes) {
-        if (placement.role == WorldNodeRole::DirectChild)
-            directChildren.append(&placement);
-    }
-    std::sort(
-        directChildren.begin(), directChildren.end(),
-        [](const WorldNodePlacement *left,
-           const WorldNodePlacement *right) {
-            if (left->distanceAlongParent
-                != right->distanceAlongParent) {
-                return left->distanceAlongParent
-                    < right->distanceAlongParent;
-            }
-            return left->id < right->id;
-        });
-
-    QSet<NodeId> includedDirectChildren;
-    QSet<NodeId> fogHintIds;
-    const qsizetype foregroundCount = qMin<qsizetype>(
-        profile.foregroundCorridorCount, directChildren.size());
-    const qsizetype visibleCount = qMin<qsizetype>(
-        directChildren.size(),
-        profile.foregroundCorridorCount + profile.fogHintCount);
-    for (qsizetype i = 0; i < visibleCount; ++i) {
-        includedDirectChildren.insert(directChildren.at(i)->id);
-        if (i >= foregroundCount)
-            fogHintIds.insert(directChildren.at(i)->id);
-    }
+    const PerspectiveDirectChildWindow window =
+        PerspectivePresentationPolicy::select(world, view, profile);
 
     for (const WorldNodePlacement &placement : world.nodes) {
         if (placement.role == WorldNodeRole::DirectChild
-            && !includedDirectChildren.contains(placement.id)) {
+            && !window.isForeground(placement.id)
+            && !window.isFogHint(placement.id)) {
             continue;
         }
-        if (placement.role == WorldNodeRole::Descendant
-            && !includedDirectChildren.contains(placement.parentId)) {
+        if (placement.role == WorldNodeRole::Descendant)
             continue;
-        }
         const FileNode *entry = findNode(nodes, placement.id);
         if (!entry)
             continue;
@@ -238,12 +211,12 @@ QVector<ProjectedNode> PerspectiveProjection::project(
             .hiddenChildCount = placement.hiddenChildCount,
             .corridorSlot = placement.lane,
             .depthLayer = placement.semanticDepth,
-            .depthOpacity = fogHintIds.contains(placement.id)
+            .depthOpacity = window.isFogHint(placement.id)
                 ? qMin(projected.opacity, profile.fogHintOpacity)
                 : projected.opacity,
             .cameraDepth = projected.cameraDepth,
             .apparentScale = projected.scale,
-            .fogHint = fogHintIds.contains(placement.id)
+            .fogHint = window.isFogHint(placement.id)
         };
 
         qreal parentScale = 1.0;
@@ -279,6 +252,26 @@ QVector<ProjectedNode> PerspectiveProjection::project(
         node.hitArea = paddedHitArea(
             node.branchSurface, profile.hitPadding);
         result.append(node);
+    }
+
+    if (ProjectedNode *focus =
+            findProjectedNode(result, world.focusedId)) {
+        if (const FileNode *focusedEntry =
+                findNode(nodes, world.focusedId)) {
+            const quint64 projectedDirectChildCount =
+                static_cast<quint64>(std::count_if(
+                    result.cbegin(), result.cend(),
+                    [focusedId = world.focusedId](
+                        const ProjectedNode &node) {
+                        return node.parentId == focusedId
+                            && node.depthLayer == 1;
+                    }));
+            focus->hiddenChildCount =
+                PerspectivePresentationPolicy::hiddenDirectChildCount(
+                    focusedEntry->totalChildCount,
+                    window.materializedDirectChildCount,
+                    projectedDirectChildCount);
+        }
     }
 
     // Projected surfaces are returned in painter order. The renderer reverses

@@ -97,6 +97,7 @@ const ThemeProfile &SakuraMorningTheme::profile()
             .fogStartDepth = 4.0,
             .fogEndDepth = 9.0,
             .minimumFogOpacity = 0.25,
+            .minimumHitOpacity = 0.25,
             .fogHintOpacity = 0.48,
             .focusedTrunkNearWidth = 130.0,
             .focusedTrunkFarWidth = 82.0,

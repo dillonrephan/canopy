@@ -2,6 +2,7 @@
 #include "FakeTreeData.h"
 #include "LabelVisibilityPolicy.h"
 #include "NavigationState.h"
+#include "PerspectivePresentationPolicy.h"
 #include "PerspectiveProjection.h"
 #include "ThemeRegistry.h"
 #include "TreeLayoutEngine.h"
@@ -25,14 +26,18 @@ QVector<FileNode> perspectiveNodes(int childCount)
         .kind = NodeKind::Directory
     });
     for (int i = 0; i < childCount; ++i) {
+        const NodeId childId = static_cast<NodeId>(i + 2);
+        nodes.first().children.append(childId);
         nodes.append({
-            .id = static_cast<NodeId>(i + 2),
+            .id = childId,
             .parentId = 1,
             .name = QStringLiteral("Child %1").arg(i),
             .path = QStringLiteral("/focus/child-%1").arg(i),
             .kind = NodeKind::Directory
         });
     }
+    nodes.first().totalChildCount =
+        static_cast<quint64>(childCount);
     return nodes;
 }
 
@@ -57,6 +62,51 @@ WorldLayout perspectiveWorld(int childCount)
         });
     }
     return world;
+}
+
+struct PerspectiveHierarchy {
+    QVector<FileNode> nodes;
+    WorldLayout world {.focusedId = 1};
+};
+
+PerspectiveHierarchy perspectiveHierarchy(
+    int directChildCount, int descendantsPerChild)
+{
+    PerspectiveHierarchy fixture;
+    fixture.nodes = perspectiveNodes(directChildCount);
+    fixture.world = perspectiveWorld(directChildCount);
+    NodeId descendantId =
+        static_cast<NodeId>(directChildCount + 2);
+
+    for (int directIndex = 0;
+         directIndex < directChildCount; ++directIndex) {
+        const NodeId parentId = static_cast<NodeId>(directIndex + 2);
+        for (int descendantIndex = 0;
+             descendantIndex < descendantsPerChild;
+             ++descendantIndex) {
+            fixture.nodes.append({
+                .id = descendantId,
+                .parentId = parentId,
+                .name = QStringLiteral("Descendant %1")
+                    .arg(descendantId),
+                .path = QStringLiteral("/focus/child-%1/descendant-%2")
+                    .arg(directIndex)
+                    .arg(descendantIndex),
+                .kind = NodeKind::Document
+            });
+            fixture.world.nodes.append({
+                .id = descendantId,
+                .parentId = parentId,
+                .role = WorldNodeRole::Descendant,
+                .siblingOrder = descendantIndex,
+                .siblingCount = descendantsPerChild,
+                .semanticDepth = 2,
+                .distanceAlongParent = 1.0
+            });
+            ++descendantId;
+        }
+    }
+    return fixture;
 }
 
 ViewState perspectiveView(qreal travelDepth = 0.0)
@@ -100,6 +150,13 @@ private slots:
     void perspectiveProjectionKeepsParentContextVisible();
     void perspectiveProjectionPreservesLaneOrdering();
     void perspectiveProjectionIsFiniteAndBounded();
+    void perspectiveBudgetHasExactEdges();
+    void perspectiveProjectionEnforcesHierarchyBudget();
+    void perspectiveNonRootBudgetHasExactCeiling();
+    void perspectiveWindowSlidesAndRestores();
+    void perspectiveWindowUsesDeterministicOrdering();
+    void perspectiveOverflowReflectsProjectionBudget();
+    void perspectiveContentsPolicyUsesEightEntryBudget();
     void perspectiveProjectionUsesDepthOrder();
     void perspectiveProjectionTracksViewport();
     void perspectiveProjectionBuildsTaperedSurfaces();
@@ -163,6 +220,10 @@ void TreeLayoutEngineTest::activeThemeProfileIsComplete()
     QVERIFY(theme.perspective.fogStartDepth
             < theme.perspective.fogEndDepth);
     QVERIFY(theme.perspective.minimumCameraDepth > 0.0);
+    QVERIFY(theme.perspective.minimumFogOpacity
+            >= theme.perspective.minimumHitOpacity);
+    QVERIFY(theme.perspective.fogHintOpacity
+            > theme.perspective.minimumHitOpacity);
     QVERIFY(theme.perspective.focusedTrunkNearWidth
             > theme.perspective.focusedTrunkFarWidth);
     QVERIFY(theme.perspective.directoryCorridorWidth
@@ -451,10 +512,307 @@ void TreeLayoutEngineTest::perspectiveProjectionIsFiniteAndBounded()
         QVERIFY(qIsFinite(node.position.x()));
         QVERIFY(qIsFinite(node.position.y()));
         QVERIFY(qIsFinite(node.apparentScale));
+        if (node.fogHint) {
+            QCOMPARE(node.depthOpacity,
+                     ThemeRegistry::active()
+                         .perspective.minimumFogOpacity);
+            QVERIFY(node.depthOpacity
+                    >= ThemeRegistry::active()
+                        .perspective.minimumHitOpacity);
+            QVERIFY(!node.hitArea.isEmpty());
+        }
     }
     const QVector<ProjectedNode> farPast = projection.project(
         world, nodes, perspectiveView(1'000'000.0));
     QVERIFY(farPast.isEmpty());
+}
+
+void TreeLayoutEngineTest::perspectiveBudgetHasExactEdges()
+{
+    const PerspectiveProjection projection;
+    for (const int childCount : {0, 1, 5, 6, 7, 8, 9, 16}) {
+        const QVector<ProjectedNode> projected = projection.project(
+            perspectiveWorld(childCount),
+            perspectiveNodes(childCount),
+            perspectiveView());
+        qsizetype foregroundCount = 0;
+        qsizetype fogHintCount = 0;
+        for (const ProjectedNode &node : projected) {
+            if (node.parentId != NodeId(1))
+                continue;
+            if (node.fogHint)
+                ++fogHintCount;
+            else
+                ++foregroundCount;
+        }
+
+        const qsizetype expectedForeground = qMin(childCount, 6);
+        const qsizetype expectedFogHints =
+            qMin(qMax(childCount - 6, 0), 2);
+        const qsizetype expectedDirect = qMin(childCount, 8);
+        QCOMPARE(foregroundCount, expectedForeground);
+        QCOMPARE(fogHintCount, expectedFogHints);
+        QCOMPARE(foregroundCount + fogHintCount, expectedDirect);
+        QCOMPARE(projected.size(), qsizetype(1) + expectedDirect);
+    }
+}
+
+void TreeLayoutEngineTest::perspectiveProjectionEnforcesHierarchyBudget()
+{
+    constexpr int directChildCount = 16;
+    constexpr int descendantsPerChild = 2;
+    const PerspectiveHierarchy fixture = perspectiveHierarchy(
+        directChildCount, descendantsPerChild);
+    const PerspectiveProjection projection;
+    const QVector<ProjectedNode> first = projection.project(
+        fixture.world, fixture.nodes, perspectiveView());
+    const QVector<ProjectedNode> second = projection.project(
+        fixture.world, fixture.nodes, perspectiveView());
+    QSet<NodeId> foregroundIds;
+    QSet<NodeId> fogHintIds;
+    QCOMPARE(first.size(), qsizetype(9));
+    QCOMPARE(first.size(), second.size());
+    for (qsizetype i = 0; i < first.size(); ++i)
+        QCOMPARE(first.at(i).id, second.at(i).id);
+
+    for (const ProjectedNode &node : first) {
+        if (node.parentId == NodeId(1)) {
+            if (node.fogHint) {
+                fogHintIds.insert(node.id);
+                QVERIFY(node.depthOpacity
+                        <= ThemeRegistry::active()
+                            .perspective.fogHintOpacity);
+                QVERIFY(node.depthOpacity
+                        >= ThemeRegistry::active()
+                            .perspective.minimumHitOpacity);
+            } else {
+                foregroundIds.insert(node.id);
+            }
+            QVERIFY(!node.branchSurface.isEmpty());
+            QVERIFY(!node.hitArea.isEmpty());
+            continue;
+        }
+        QVERIFY(node.depthLayer != 2);
+    }
+
+    QCOMPARE(foregroundIds, QSet<NodeId>({2, 3, 4, 5, 6, 7}));
+    QCOMPARE(fogHintIds, QSet<NodeId>({8, 9}));
+    QVERIFY(!projectedNode(first, 10));
+    for (NodeId descendantId = NodeId(directChildCount + 2);
+         descendantId < NodeId(
+             directChildCount + 2
+             + directChildCount * descendantsPerChild);
+         ++descendantId) {
+        QVERIFY(!projectedNode(first, descendantId));
+    }
+
+    const QVector<FileNode> nonRootNodes = FakeTreeData::create();
+    const WorldLayout nonRootWorld =
+        WorldLayoutEngine().layout(nonRootNodes, 6);
+    const QVector<ProjectedNode> nonRoot = projection.project(
+        nonRootWorld, nonRootNodes, perspectiveView());
+    QVERIFY(nonRoot.size() <= 10);
+    QVERIFY(std::ranges::none_of(
+        nonRoot, [](const ProjectedNode &node) {
+            return node.depthLayer == 2;
+        }));
+    const ProjectedNode *parent = projectedNode(nonRoot, 1);
+    QVERIFY(parent);
+    QVERIFY(parent->parentContext);
+}
+
+void TreeLayoutEngineTest::perspectiveNonRootBudgetHasExactCeiling()
+{
+    constexpr NodeId parentId = 100;
+    PerspectiveHierarchy fixture = perspectiveHierarchy(16, 2);
+    fixture.nodes.first().parentId = parentId;
+    fixture.nodes.append({
+        .id = parentId,
+        .parentId = InvalidNodeId,
+        .name = QStringLiteral("Parent context"),
+        .path = QStringLiteral("/parent"),
+        .kind = NodeKind::Directory
+    });
+    fixture.world.nodes.first().parentId = parentId;
+    fixture.world.nodes.prepend({
+        .id = parentId,
+        .parentId = InvalidNodeId,
+        .role = WorldNodeRole::ParentContext,
+        .semanticDepth = -1,
+        .distanceAlongParent = -1.0
+    });
+
+    const QVector<ProjectedNode> projected =
+        PerspectiveProjection().project(
+            fixture.world, fixture.nodes, perspectiveView());
+    qsizetype foregroundCount = 0;
+    qsizetype fogHintCount = 0;
+    qsizetype descendantCount = 0;
+    for (const ProjectedNode &node : projected) {
+        if (node.depthLayer == 2)
+            ++descendantCount;
+        if (node.parentId != NodeId(1))
+            continue;
+        if (node.fogHint)
+            ++fogHintCount;
+        else
+            ++foregroundCount;
+    }
+
+    QCOMPARE(projected.size(), qsizetype(10));
+    QCOMPARE(foregroundCount, qsizetype(6));
+    QCOMPARE(fogHintCount, qsizetype(2));
+    QCOMPARE(descendantCount, qsizetype(0));
+
+    const ProjectedNode *parent = projectedNode(projected, parentId);
+    const ProjectedNode *focus = projectedNode(projected, 1);
+    QVERIFY(parent);
+    QVERIFY(focus);
+    QVERIFY(parent->parentContext);
+    QVERIFY(!focus->parentContext);
+    QVERIFY(!parent->fogHint);
+    QVERIFY(!focus->fogHint);
+}
+
+void TreeLayoutEngineTest::perspectiveOverflowReflectsProjectionBudget()
+{
+    const PerspectiveProjection projection;
+
+    QVector<FileNode> smallNodes = perspectiveNodes(5);
+    smallNodes.first().totalChildCount = 5;
+    const QVector<ProjectedNode> small = projection.project(
+        perspectiveWorld(5), smallNodes, perspectiveView());
+    const ProjectedNode *smallFocus = projectedNode(small, 1);
+    QVERIFY(smallFocus);
+    QCOMPARE(smallFocus->hiddenChildCount, quint64(0));
+
+    QVector<FileNode> fullNodes = perspectiveNodes(16);
+    fullNodes.first().totalChildCount = 16;
+    const QVector<ProjectedNode> full = projection.project(
+        perspectiveWorld(16), fullNodes, perspectiveView());
+    const ProjectedNode *fullFocus = projectedNode(full, 1);
+    QVERIFY(fullFocus);
+    QCOMPARE(fullFocus->hiddenChildCount, quint64(8));
+
+    QVector<FileNode> materializedNodes = perspectiveNodes(16);
+    materializedNodes.first().totalChildCount = 0;
+    const QVector<ProjectedNode> materialized = projection.project(
+        perspectiveWorld(16), materializedNodes, perspectiveView());
+    const ProjectedNode *materializedFocus =
+        projectedNode(materialized, 1);
+    QVERIFY(materializedFocus);
+    QCOMPARE(materializedFocus->hiddenChildCount, quint64(8));
+
+    QVector<FileNode> partialNodes = perspectiveNodes(16);
+    partialNodes.first().totalChildCount = 1'000'000;
+    partialNodes.first().directoryState = DirectoryLoadState::Partial;
+    WorldLayout partialWorld = perspectiveWorld(16);
+    partialWorld.nodes.first().hiddenChildCount = 1'000'000 - 16;
+    const QVector<ProjectedNode> partial = projection.project(
+        partialWorld, partialNodes, perspectiveView());
+    const ProjectedNode *partialFocus = projectedNode(partial, 1);
+    QVERIFY(partialFocus);
+    QCOMPARE(partialFocus->hiddenChildCount, quint64(1'000'000 - 8));
+}
+
+void TreeLayoutEngineTest::perspectiveWindowSlidesAndRestores()
+{
+    const PerspectiveHierarchy fixture = perspectiveHierarchy(16, 0);
+    const PerspectiveProjection projection;
+    const QVector<ProjectedNode> initial = projection.project(
+        fixture.world, fixture.nodes, perspectiveView());
+    const QVector<ProjectedNode> advanced = projection.project(
+        fixture.world, fixture.nodes, perspectiveView(2.1));
+    const QVector<ProjectedNode> restored = projection.project(
+        fixture.world, fixture.nodes, perspectiveView());
+    QSet<NodeId> initialDirectIds;
+    QSet<NodeId> advancedDirectIds;
+
+    for (const ProjectedNode &node : initial) {
+        if (node.parentId == NodeId(1))
+            initialDirectIds.insert(node.id);
+    }
+    for (const ProjectedNode &node : advanced) {
+        if (node.parentId == NodeId(1))
+            advancedDirectIds.insert(node.id);
+    }
+    QCOMPARE(initialDirectIds,
+             QSet<NodeId>({2, 3, 4, 5, 6, 7, 8, 9}));
+    QCOMPARE(advancedDirectIds,
+             QSet<NodeId>({3, 4, 5, 6, 7, 8, 9, 10}));
+
+    QCOMPARE(restored.size(), initial.size());
+    for (const ProjectedNode &initialNode : initial) {
+        const ProjectedNode *restoredNode =
+            projectedNode(restored, initialNode.id);
+        QVERIFY(restoredNode);
+        QCOMPARE(restoredNode->position, initialNode.position);
+        QCOMPARE(restoredNode->cameraDepth, initialNode.cameraDepth);
+        QCOMPARE(restoredNode->depthOpacity, initialNode.depthOpacity);
+        QCOMPARE(restoredNode->fogHint, initialNode.fogHint);
+        QCOMPARE(restoredNode->branchSurface,
+                 initialNode.branchSurface);
+        QCOMPARE(restoredNode->hitArea, initialNode.hitArea);
+    }
+}
+
+void TreeLayoutEngineTest::perspectiveWindowUsesDeterministicOrdering()
+{
+    WorldLayout world {.focusedId = 1};
+    world.nodes.append({
+        .id = 1,
+        .role = WorldNodeRole::Focus
+    });
+    world.nodes.append({
+        .id = 2,
+        .parentId = 1,
+        .role = WorldNodeRole::DirectChild,
+        .lane = 2,
+        .distanceAlongParent = 1.0
+    });
+    world.nodes.append({
+        .id = 4,
+        .parentId = 1,
+        .role = WorldNodeRole::DirectChild,
+        .lane = 0,
+        .distanceAlongParent = 1.0
+    });
+    world.nodes.append({
+        .id = 3,
+        .parentId = 1,
+        .role = WorldNodeRole::DirectChild,
+        .lane = 0,
+        .distanceAlongParent = 1.0
+    });
+
+    const PerspectiveDirectChildWindow window =
+        PerspectivePresentationPolicy::select(
+            world, perspectiveView(),
+            ThemeRegistry::active().perspective);
+    QCOMPARE(window.foregroundIds, QVector<NodeId>({3, 4, 2}));
+    QVERIFY(window.fogHintIds.isEmpty());
+    QCOMPARE(window.materializedDirectChildCount, qsizetype(3));
+}
+
+void TreeLayoutEngineTest::perspectiveContentsPolicyUsesEightEntryBudget()
+{
+    const PerspectiveProfile &profile =
+        ThemeRegistry::active().perspective;
+    QVector<FileNode> smallNodes = perspectiveNodes(5);
+    QVERIFY(!PerspectivePresentationPolicy::requiresContents(
+        smallNodes.first(), profile));
+
+    QVector<FileNode> fullNodes = perspectiveNodes(16);
+    QVERIFY(PerspectivePresentationPolicy::requiresContents(
+        fullNodes.first(), profile));
+    QVERIFY(!DirectoryPresentationPolicy::evaluate(fullNodes.first())
+                 .usesContentsFallback);
+
+    QVector<FileNode> incompleteNodes = perspectiveNodes(5);
+    incompleteNodes.first().directoryState =
+        DirectoryLoadState::Partial;
+    QVERIFY(PerspectivePresentationPolicy::requiresContents(
+        incompleteNodes.first(), profile));
 }
 
 void TreeLayoutEngineTest::perspectiveProjectionUsesDepthOrder()

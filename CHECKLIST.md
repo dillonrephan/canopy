@@ -43,10 +43,21 @@ check `avahi-daemon.socket`; the existing Toolbx binds that host socket.
 - Legacy pan, wheel zoom, blank-space zoom, and reset are explicit no-ops in
   perspective mode until camera travel is implemented. The planar input and
   transform paths remain unchanged.
+- `PerspectivePresentationPolicy` now owns the pure camera-ahead presentation
+  window and Contents arithmetic. Perspective projects at most six foreground
+  direct children plus two fog hints, projects no descendants, and retains at
+  most nine root or ten non-root nodes including focus and parent context.
+- The eight-slot window orders direct children by world distance, lane, then
+  identity. Passing growth advances the bounded window; reversing travel
+  restores exact membership, surfaces, and hit geometry.
+- Perspective Contents state uses the eight-entry projection budget and
+  incomplete-directory state without changing the core/planar 16-entry policy.
+  The focus badge subtracts projected direct children from the greater of known
+  total and materialized direct-child count.
 - The full build, QML lint, and test suite passed, and the final isolated frame
-  was inspected at `/tmp/canopy-stage6-perspective-final.png`.
+  was inspected at `/tmp/canopy-stage7-budget-final-verified.png`.
 
-## Active task: validate the active perspective presentation budget
+## Active task: convert perspective input to camera travel
 
 Perspective math and renderer dispatch are now locked by tests:
 
@@ -59,7 +70,11 @@ Perspective math and renderer dispatch are now locked by tests:
 - Left/right lane ordering cannot flip.
 - Non-root focus retains deterministic, profile-derived parent context in
   front of the focused trunk.
-- Projection is bounded to six foreground corridors and two fog hints.
+- Projection is strictly bounded to six foreground corridors and two fog
+  hints, with no projected descendants.
+- Root scenes contain at most nine nodes; non-root scenes at most ten.
+- Fog hints retain exact hit geometry down to the 0.25 fog/hit boundary.
+- Camera-ahead membership advances deterministically and reverses exactly.
 
 Projected geometry is now locked by tests:
 
@@ -79,14 +94,27 @@ Stage 6 is complete:
   correct near-over-far occlusion, and usable labels without planar transforms.
 - Perspective input hints state that depth travel is not active yet.
 
+Stage 7 is complete:
+
+- The projector suppresses every descendant and every direct child outside the
+  camera-ahead 6+2 window, so omitted entries create no paint or hit geometry.
+- Fog hints remain real, bounded-opacity hit targets; they do not sprout
+  descendant geometry.
+- Direct-child membership, ordering, cardinality, reversal, overflow counts,
+  incomplete states, and planar/core rollback behavior are covered by tests.
+- The inspected 29-entry frame stayed bounded and reported `+21 more in
+  Contents`, exactly 29 known entries minus eight projected direct children.
+
 Before implementing camera input:
 
-- Exercise directories with more than eight projected children and confirm the
-  six-foreground plus two-fog budget in paint and hit behavior.
-- Check that overlapping focused-trunk and corridor targets resolve to the
-  intended visible endpoint or near surface. This renderer-level layering is
-  kept as a small shared-visibility code path but is not yet directly unit
-  tested through `TreeSceneItem`.
+- Define the travel-depth range and wheel sensitivity without reusing planar
+  zoom state.
+- Reproject continuously from `ViewState::travelDepth`; preserve the tested
+  camera-ahead window and exact reversal behavior.
+- Replace the temporary perspective input no-ops and update the footer only
+  when travel is functional.
+- Direct `TreeSceneItem` paint/hit layering still lacks its own unit harness;
+  keep the existing shared-label and two-pass implementation small.
 - Decide how projected surfaces interpolate during focus/live transitions;
   preserve the current atomic geometry fallback until paint and hit can derive
   from one interpolated path.
