@@ -96,12 +96,15 @@ struct PerspectiveProfile {
     qreal nearYRatio = 0.82;
     qreal focalDepth = 5.0;
     qreal cameraClearance = 1.0;
-    qreal minimumCameraDepth = 0.35;
-    qreal laneSpacing = 220.0;
+    qreal minimumCameraDepth = 0.05;
+    qreal laneSpacing = 160.0;
     qreal descendantSpacing = 90.0;
     qreal fogStartDepth = 4.0;
     qreal fogEndDepth = 9.0;
     qreal minimumFogOpacity = 0.25;
+    qreal fogHintOpacity = 0.48;
+    int foregroundCorridorCount = 6;
+    int fogHintCount = 2;
 };
 
 struct PresentationProfile {

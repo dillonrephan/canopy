@@ -21,6 +21,9 @@ struct ProjectedNode {
     int corridorSlot = -1;
     int depthLayer = 0;
     qreal depthOpacity = 1.0;
+    qreal cameraDepth = 0.0;
+    qreal apparentScale = 1.0;
+    bool fogHint = false;
     bool followsParentPosition = true;
 };
 

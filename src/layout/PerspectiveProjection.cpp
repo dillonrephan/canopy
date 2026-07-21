@@ -3,7 +3,10 @@
 #include "ThemeRegistry.h"
 
 #include <QHash>
+#include <QSet>
 #include <QtMath>
+
+#include <algorithm>
 
 namespace {
 struct WorldPoint {
@@ -13,8 +16,10 @@ struct WorldPoint {
 
 struct ScreenPoint {
     QPointF position;
+    qreal cameraDepth = 0.0;
     qreal scale = 1.0;
     qreal opacity = 1.0;
+    bool visible = true;
 };
 
 void setBranchGeometry(ProjectedNode &node)
@@ -54,9 +59,12 @@ ScreenPoint projectPoint(
     const qreal centerX = width * profile.centerXRatio;
     const qreal horizonY = height * profile.horizonYRatio;
     const qreal nearY = height * profile.nearYRatio;
-    const qreal cameraDepth = qMax(
-        profile.minimumCameraDepth,
-        profile.cameraClearance + point.depth - view.travelDepth);
+    const qreal rawCameraDepth =
+        profile.cameraClearance + point.depth - view.travelDepth;
+    if (rawCameraDepth <= 0.0)
+        return {.cameraDepth = rawCameraDepth, .visible = false};
+    const qreal cameraDepth =
+        qMax(profile.minimumCameraDepth, rawCameraDepth);
     const qreal scale = profile.focalDepth
         / (profile.focalDepth + cameraDepth);
 
@@ -65,6 +73,7 @@ ScreenPoint projectPoint(
             centerX + point.lateral * scale,
             horizonY + (nearY - horizonY) * scale
         },
+        .cameraDepth = cameraDepth,
         .scale = scale,
         .opacity = fogOpacity(cameraDepth, profile)
     };
@@ -92,8 +101,45 @@ QVector<ProjectedNode> PerspectiveProjection::project(
     const PerspectiveProfile &profile = theme.perspective;
     const LabelStyle &labels = theme.labels;
     QHash<NodeId, WorldPoint> worldPoints;
+    QVector<const WorldNodePlacement *> directChildren;
+    for (const WorldNodePlacement &placement : world.nodes) {
+        if (placement.role == WorldNodeRole::DirectChild)
+            directChildren.append(&placement);
+    }
+    std::sort(
+        directChildren.begin(), directChildren.end(),
+        [](const WorldNodePlacement *left,
+           const WorldNodePlacement *right) {
+            if (left->distanceAlongParent
+                != right->distanceAlongParent) {
+                return left->distanceAlongParent
+                    < right->distanceAlongParent;
+            }
+            return left->id < right->id;
+        });
+
+    QSet<NodeId> includedDirectChildren;
+    QSet<NodeId> fogHintIds;
+    const qsizetype foregroundCount = qMin<qsizetype>(
+        profile.foregroundCorridorCount, directChildren.size());
+    const qsizetype visibleCount = qMin<qsizetype>(
+        directChildren.size(),
+        profile.foregroundCorridorCount + profile.fogHintCount);
+    for (qsizetype i = 0; i < visibleCount; ++i) {
+        includedDirectChildren.insert(directChildren.at(i)->id);
+        if (i >= foregroundCount)
+            fogHintIds.insert(directChildren.at(i)->id);
+    }
 
     for (const WorldNodePlacement &placement : world.nodes) {
+        if (placement.role == WorldNodeRole::DirectChild
+            && !includedDirectChildren.contains(placement.id)) {
+            continue;
+        }
+        if (placement.role == WorldNodeRole::Descendant
+            && !includedDirectChildren.contains(placement.parentId)) {
+            continue;
+        }
         const FileNode *entry = findNode(nodes, placement.id);
         if (!entry)
             continue;
@@ -124,6 +170,8 @@ QVector<ProjectedNode> PerspectiveProjection::project(
         worldPoints.insert(placement.id, point);
 
         const ScreenPoint projected = projectPoint(point, view, profile);
+        if (!projected.visible)
+            continue;
         const qreal radius = radiusFor(
             *entry, placement.role == WorldNodeRole::Focus)
             * projected.scale;
@@ -137,7 +185,12 @@ QVector<ProjectedNode> PerspectiveProjection::project(
             .hiddenChildCount = placement.hiddenChildCount,
             .corridorSlot = placement.lane,
             .depthLayer = placement.semanticDepth,
-            .depthOpacity = projected.opacity
+            .depthOpacity = fogHintIds.contains(placement.id)
+                ? qMin(projected.opacity, profile.fogHintOpacity)
+                : projected.opacity,
+            .cameraDepth = projected.cameraDepth,
+            .apparentScale = projected.scale,
+            .fogHint = fogHintIds.contains(placement.id)
         };
 
         if (ProjectedNode *parent =

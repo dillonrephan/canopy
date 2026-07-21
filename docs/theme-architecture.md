@@ -129,7 +129,7 @@ Each numbered stage should be a coherent, buildable commit:
    output.
 3. **Complete:** Reproduce the current renderer through a planar projection
    module.
-4. Add a perspective projection beside the planar reference.
+4. **Complete:** Add a perspective projection beside the planar reference.
 5. Add projected hit geometry and tests before switching interaction.
 6. Render tapered trunk and corridor surfaces.
 7. Enforce the six-foreground plus two-fog presentation budget.

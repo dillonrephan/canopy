@@ -90,12 +90,15 @@ const ThemeProfile &SakuraMorningTheme::profile()
             .nearYRatio = 0.82,
             .focalDepth = 5.0,
             .cameraClearance = 1.0,
-            .minimumCameraDepth = 0.35,
-            .laneSpacing = 220.0,
+            .minimumCameraDepth = 0.05,
+            .laneSpacing = 160.0,
             .descendantSpacing = 90.0,
             .fogStartDepth = 4.0,
             .fogEndDepth = 9.0,
-            .minimumFogOpacity = 0.25
+            .minimumFogOpacity = 0.25,
+            .fogHintOpacity = 0.48,
+            .foregroundCorridorCount = 6,
+            .fogHintCount = 2
         },
         .presentation = {
             .foregroundCorridorCount = 8,

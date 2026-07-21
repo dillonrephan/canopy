@@ -26,25 +26,32 @@ check `avahi-daemon.socket`; the existing Toolbx binds that host socket.
 - World/planar separation tag: `checkpoint/world-planar-separation`
 - The modular Sakura profile, stable world placement, and planar projection are
   implemented and pushed.
-- `PerspectiveProjection` exists beside the planar reference but is dormant.
+- `PerspectiveProjection` exists beside the planar reference, remains dormant,
+  and has fixed-coordinate mathematical tests.
 - `TreeLayoutEngine` still selects `PlanarProjection`; the running application
   has no perspective behavior yet.
 - The full build, QML lint, and test suite passed after adding the dormant
   projector.
 
-## Active task: validate perspective math
+## Active task: projected surfaces and hit geometry
+
+Perspective math is now locked by tests:
+
+- Perspective lane spacing is 160 units.
+- Geometry is culled after the camera passes it rather than frozen nearby.
+- Approaching growth moves lower, outward, larger, and clearer.
+- Distant growth compresses toward the horizon and fogs.
+- Reversing travel restores the exact prior projection.
+- Extreme travel depths remain finite.
+- Left/right lane ordering cannot flip.
+- Projection is bounded to six foreground corridors and two fog hints.
 
 Before activating the perspective projector:
 
-- Reduce perspective lane spacing from 220 to approximately 160 units.
-- Cull geometry after the camera passes it; never freeze it near the viewer.
+- Add tapered branch surfaces to projected output.
+- Generate hit geometry from those exact projected surfaces.
 - Remove culled geometry from both painting and hit-testing.
-- Test that approaching growth moves lower, outward, larger, and clearer.
-- Test that distant growth compresses toward the horizon and fogs.
-- Test that reversing travel restores the exact prior projection.
-- Test finite output at extreme travel depths and viewport sizes.
-- Test that left/right lane ordering cannot flip.
-- Keep projection bounded to six foreground corridors and two fog hints.
+- Test that every painted corridor and its hit target agree.
 - Keep the planar projector available until perspective rendering and hit
   geometry satisfy the same correctness contracts.
 

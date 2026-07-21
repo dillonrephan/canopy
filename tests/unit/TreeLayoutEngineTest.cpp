@@ -2,6 +2,7 @@
 #include "FakeTreeData.h"
 #include "LabelVisibilityPolicy.h"
 #include "NavigationState.h"
+#include "PerspectiveProjection.h"
 #include "ThemeRegistry.h"
 #include "TreeLayoutEngine.h"
 #include "WorldLayoutEngine.h"
@@ -10,6 +11,77 @@
 #include <QtTest>
 
 #include <algorithm>
+
+namespace {
+QVector<FileNode> perspectiveNodes(int childCount)
+{
+    QVector<FileNode> nodes;
+    nodes.reserve(childCount + 1);
+    nodes.append({
+        .id = 1,
+        .parentId = InvalidNodeId,
+        .name = QStringLiteral("Focus"),
+        .path = QStringLiteral("/focus"),
+        .kind = NodeKind::Directory
+    });
+    for (int i = 0; i < childCount; ++i) {
+        nodes.append({
+            .id = static_cast<NodeId>(i + 2),
+            .parentId = 1,
+            .name = QStringLiteral("Child %1").arg(i),
+            .path = QStringLiteral("/focus/child-%1").arg(i),
+            .kind = NodeKind::Directory
+        });
+    }
+    return nodes;
+}
+
+WorldLayout perspectiveWorld(int childCount)
+{
+    WorldLayout world {.focusedId = 1};
+    world.nodes.append({
+        .id = 1,
+        .parentId = InvalidNodeId,
+        .role = WorldNodeRole::Focus
+    });
+    for (int i = 0; i < childCount; ++i) {
+        world.nodes.append({
+            .id = static_cast<NodeId>(i + 2),
+            .parentId = 1,
+            .role = WorldNodeRole::DirectChild,
+            .siblingOrder = i,
+            .siblingCount = childCount,
+            .lane = i,
+            .semanticDepth = 1,
+            .distanceAlongParent = i / 2.0 + 1.0
+        });
+    }
+    return world;
+}
+
+ViewState perspectiveView(qreal travelDepth = 0.0)
+{
+    return {
+        .viewport = {1000.0, 800.0},
+        .travelDepth = travelDepth
+    };
+}
+
+const ProjectedNode *projectedNode(
+    const QVector<ProjectedNode> &nodes, NodeId id)
+{
+    const auto found = std::ranges::find_if(
+        nodes, [id](const ProjectedNode &node) {
+            return node.id == id;
+        });
+    return found == nodes.cend() ? nullptr : &*found;
+}
+
+bool approximately(qreal actual, qreal expected, qreal tolerance = 0.01)
+{
+    return qAbs(actual - expected) <= tolerance;
+}
+}
 
 class TreeLayoutEngineTest final : public QObject
 {
@@ -21,6 +93,11 @@ private slots:
     void worldPlacementMatchesPlanarLanes();
     void worldPlacementRemainsStableWhenChildIsAdded();
     void planarProjectionPreservesGeometryAcrossViewState();
+    void perspectiveProjectionMatchesKnownCoordinates();
+    void perspectiveTravelIsMonotonicAndReversible();
+    void perspectiveProjectionCullsPassedGeometry();
+    void perspectiveProjectionPreservesLaneOrdering();
+    void perspectiveProjectionIsFiniteAndBounded();
     void layoutIsDeterministic();
     void focusedDirectoryKeepsParentContext();
     void wideDirectoryUsesUniquePositions();
@@ -74,6 +151,11 @@ void TreeLayoutEngineTest::activeThemeProfileIsComplete()
     QCOMPARE(theme.planar.corridorCount,
              theme.presentation.foregroundCorridorCount
                  + theme.presentation.fogHintCount);
+    QCOMPARE(theme.perspective.foregroundCorridorCount, 6);
+    QCOMPARE(theme.perspective.fogHintCount, 2);
+    QVERIFY(theme.perspective.fogStartDepth
+            < theme.perspective.fogEndDepth);
+    QVERIFY(theme.perspective.minimumCameraDepth > 0.0);
 }
 
 void TreeLayoutEngineTest::worldPlacementMatchesPlanarLanes()
@@ -166,6 +248,153 @@ void TreeLayoutEngineTest::planarProjectionPreservesGeometryAcrossViewState()
         QCOMPARE(defaultView.at(i).labelBounds,
                  movedView.at(i).labelBounds);
     }
+}
+
+void TreeLayoutEngineTest::perspectiveProjectionMatchesKnownCoordinates()
+{
+    const PerspectiveProjection projection;
+    const QVector<FileNode> nodes = perspectiveNodes(1);
+    WorldLayout nearWorld = perspectiveWorld(1);
+    const QVector<ProjectedNode> nearProjection = projection.project(
+        nearWorld, nodes, perspectiveView());
+    const ProjectedNode *near = projectedNode(nearProjection, 2);
+    QVERIFY(near);
+    QVERIFY(approximately(near->position.x(), 385.7143));
+    QVERIFY(approximately(near->position.y(), 523.4286));
+    QVERIFY(approximately(near->cameraDepth, 2.0));
+    QVERIFY(approximately(near->apparentScale, 5.0 / 7.0));
+    QVERIFY(approximately(near->radius, 15.0));
+    QVERIFY(approximately(near->depthOpacity, 1.0));
+
+    WorldLayout farWorld = perspectiveWorld(1);
+    farWorld.nodes[1].lane = 8;
+    farWorld.nodes[1].distanceAlongParent = 5.0;
+    const QVector<ProjectedNode> farProjection = projection.project(
+        farWorld, nodes, perspectiveView());
+    const ProjectedNode *far = projectedNode(farProjection, 2);
+    QVERIFY(far);
+    QVERIFY(approximately(far->position.x(), 136.3636));
+    QVERIFY(approximately(far->position.y(), 402.9091));
+    QVERIFY(approximately(far->cameraDepth, 6.0));
+    QVERIFY(approximately(far->apparentScale, 5.0 / 11.0));
+    QVERIFY(approximately(far->depthOpacity, 0.70));
+}
+
+void TreeLayoutEngineTest::perspectiveTravelIsMonotonicAndReversible()
+{
+    const PerspectiveProjection projection;
+    const QVector<FileNode> nodes = perspectiveNodes(1);
+    const WorldLayout world = perspectiveWorld(1);
+    const QVector<ProjectedNode> initial = projection.project(
+        world, nodes, perspectiveView());
+    const QVector<ProjectedNode> approached = projection.project(
+        world, nodes, perspectiveView(0.75));
+    const QVector<ProjectedNode> restored = projection.project(
+        world, nodes, perspectiveView());
+    const ProjectedNode *initialChild = projectedNode(initial, 2);
+    const ProjectedNode *approachedChild = projectedNode(approached, 2);
+    const ProjectedNode *restoredChild = projectedNode(restored, 2);
+    QVERIFY(initialChild);
+    QVERIFY(approachedChild);
+    QVERIFY(restoredChild);
+
+    QVERIFY(approachedChild->position.y() > initialChild->position.y());
+    QVERIFY(qAbs(approachedChild->position.x() - 500.0)
+            > qAbs(initialChild->position.x() - 500.0));
+    QVERIFY(approachedChild->radius > initialChild->radius);
+    QVERIFY(approachedChild->depthOpacity >= initialChild->depthOpacity);
+    QVERIFY(approximately(approachedChild->position.x(), 372.0));
+    QVERIFY(approximately(approachedChild->position.y(), 563.2));
+    QVERIFY(approximately(approachedChild->apparentScale, 0.8));
+
+    QCOMPARE(restoredChild->position, initialChild->position);
+    QCOMPARE(restoredChild->radius, initialChild->radius);
+    QCOMPARE(restoredChild->cameraDepth, initialChild->cameraDepth);
+    QCOMPARE(restoredChild->apparentScale,
+             initialChild->apparentScale);
+    QCOMPARE(restoredChild->depthOpacity,
+             initialChild->depthOpacity);
+}
+
+void TreeLayoutEngineTest::perspectiveProjectionCullsPassedGeometry()
+{
+    const PerspectiveProjection projection;
+    const QVector<FileNode> nodes = perspectiveNodes(1);
+    const WorldLayout world = perspectiveWorld(1);
+
+    const QVector<ProjectedNode> pastFocus = projection.project(
+        world, nodes, perspectiveView(1.1));
+    QVERIFY(!projectedNode(pastFocus, 1));
+    QVERIFY(projectedNode(pastFocus, 2));
+
+    const QVector<ProjectedNode> pastEverything = projection.project(
+        world, nodes, perspectiveView(2.1));
+    QVERIFY(pastEverything.isEmpty());
+}
+
+void TreeLayoutEngineTest::perspectiveProjectionPreservesLaneOrdering()
+{
+    const PerspectiveProjection projection;
+    const QVector<FileNode> nodes = perspectiveNodes(2);
+    WorldLayout world = perspectiveWorld(2);
+    world.nodes[1].distanceAlongParent = 1.0;
+    world.nodes[2].distanceAlongParent = 1.0;
+
+    const QVector<ProjectedNode> initial = projection.project(
+        world, nodes, perspectiveView());
+    const QVector<ProjectedNode> approached = projection.project(
+        world, nodes, perspectiveView(0.75));
+    const ProjectedNode *left = projectedNode(initial, 2);
+    const ProjectedNode *right = projectedNode(initial, 3);
+    const ProjectedNode *approachedLeft = projectedNode(approached, 2);
+    const ProjectedNode *approachedRight = projectedNode(approached, 3);
+    QVERIFY(left);
+    QVERIFY(right);
+    QVERIFY(approachedLeft);
+    QVERIFY(approachedRight);
+
+    QVERIFY(left->position.x() < 500.0);
+    QVERIFY(right->position.x() > 500.0);
+    QVERIFY(approximately(left->position.y(), right->position.y()));
+    QVERIFY(approachedLeft->position.x() < left->position.x());
+    QVERIFY(approachedRight->position.x() > right->position.x());
+}
+
+void TreeLayoutEngineTest::perspectiveProjectionIsFiniteAndBounded()
+{
+    const PerspectiveProjection projection;
+    const QVector<FileNode> nodes = perspectiveNodes(16);
+    const WorldLayout world = perspectiveWorld(16);
+    const QVector<ProjectedNode> projected = projection.project(
+        world, nodes, perspectiveView());
+    qsizetype directChildren = 0;
+    qsizetype fogHints = 0;
+
+    for (const ProjectedNode &node : projected) {
+        QVERIFY(qIsFinite(node.position.x()));
+        QVERIFY(qIsFinite(node.position.y()));
+        QVERIFY(qIsFinite(node.radius));
+        QVERIFY(qIsFinite(node.cameraDepth));
+        QVERIFY(qIsFinite(node.apparentScale));
+        if (node.parentId == NodeId(1)) {
+            ++directChildren;
+            if (node.fogHint)
+                ++fogHints;
+        }
+    }
+    QCOMPARE(directChildren, qsizetype(8));
+    QCOMPARE(fogHints, qsizetype(2));
+
+    const QVector<ProjectedNode> extremeDistance = projection.project(
+        world, nodes, perspectiveView(-1'000'000.0));
+    for (const ProjectedNode &node : extremeDistance) {
+        QVERIFY(qIsFinite(node.position.x()));
+        QVERIFY(qIsFinite(node.position.y()));
+        QVERIFY(qIsFinite(node.apparentScale));
+    }
+    const QVector<ProjectedNode> farPast = projection.project(
+        world, nodes, perspectiveView(1'000'000.0));
+    QVERIFY(farPast.isEmpty());
 }
 
 void TreeLayoutEngineTest::layoutIsDeterministic()
