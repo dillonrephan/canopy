@@ -82,6 +82,21 @@ const ThemeProfile &SakuraMorningTheme::profile()
             .rearInitialOpacity = 0.68,
             .rearOpacityStep = 0.12
         },
+        .perspective = {
+            .fallbackViewportWidth = 840.0,
+            .fallbackViewportHeight = 720.0,
+            .centerXRatio = 0.5,
+            .horizonYRatio = 0.24,
+            .nearYRatio = 0.82,
+            .focalDepth = 5.0,
+            .cameraClearance = 1.0,
+            .minimumCameraDepth = 0.35,
+            .laneSpacing = 220.0,
+            .descendantSpacing = 90.0,
+            .fogStartDepth = 4.0,
+            .fogEndDepth = 9.0,
+            .minimumFogOpacity = 0.25
+        },
         .presentation = {
             .foregroundCorridorCount = 8,
             .fogHintCount = 8

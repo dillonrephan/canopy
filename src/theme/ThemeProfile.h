@@ -88,6 +88,22 @@ struct PlanarLayoutProfile {
     qreal rearOpacityStep = 0.12;
 };
 
+struct PerspectiveProfile {
+    qreal fallbackViewportWidth = 840.0;
+    qreal fallbackViewportHeight = 720.0;
+    qreal centerXRatio = 0.5;
+    qreal horizonYRatio = 0.24;
+    qreal nearYRatio = 0.82;
+    qreal focalDepth = 5.0;
+    qreal cameraClearance = 1.0;
+    qreal minimumCameraDepth = 0.35;
+    qreal laneSpacing = 220.0;
+    qreal descendantSpacing = 90.0;
+    qreal fogStartDepth = 4.0;
+    qreal fogEndDepth = 9.0;
+    qreal minimumFogOpacity = 0.25;
+};
+
 struct PresentationProfile {
     int foregroundCorridorCount = 8;
     int fogHintCount = 8;
@@ -103,5 +119,6 @@ struct ThemeProfile {
     MotionProfile motion;
     CameraProfile camera;
     PlanarLayoutProfile planar;
+    PerspectiveProfile perspective;
     PresentationProfile presentation;
 };
