@@ -453,6 +453,8 @@ void TreeSceneItemTest::qmlTravelControlsAndShortcutHandlersDriveScene()
         QStringLiteral("travelForwardButton"));
     auto *resetButton = window->findChild<QQuickItem *>(
         QStringLiteral("resetViewButton"));
+    auto *addressField = window->findChild<QQuickItem *>(
+        QStringLiteral("addressField"));
     auto *backShortcut = window->findChild<QObject *>(
         QStringLiteral("travelBackShortcut"));
     auto *forwardShortcut = window->findChild<QObject *>(
@@ -463,6 +465,7 @@ void TreeSceneItemTest::qmlTravelControlsAndShortcutHandlersDriveScene()
     QVERIFY(backButton);
     QVERIFY(forwardButton);
     QVERIFY(resetButton);
+    QVERIFY(addressField);
     QVERIFY(backShortcut);
     QVERIFY(forwardShortcut);
     QVERIFY(resetShortcut);
@@ -483,8 +486,8 @@ void TreeSceneItemTest::qmlTravelControlsAndShortcutHandlersDriveScene()
     clickItem(window, resetButton);
     QCOMPARE(tree->travelDepth(), qreal(0.0));
 
-    tree->forceActiveFocus();
-    QVERIFY(tree->hasActiveFocus());
+    addressField->forceActiveFocus();
+    QTRY_VERIFY(addressField->hasActiveFocus());
     QCOMPARE(
         forwardShortcut->property("sequence").toString(),
         QStringLiteral("PageDown"));
@@ -495,6 +498,11 @@ void TreeSceneItemTest::qmlTravelControlsAndShortcutHandlersDriveScene()
         resetShortcut->property("sequence").toString(),
         QStringLiteral("Ctrl+0"));
 
+    QVERIFY(!forwardShortcut->property("enabled").toBool());
+    QVERIFY(!backShortcut->property("enabled").toBool());
+
+    addressField->setFocus(false);
+    QTRY_VERIFY(!addressField->hasActiveFocus());
     QVERIFY(forwardShortcut->property("enabled").toBool());
     QVERIFY(QMetaObject::invokeMethod(forwardShortcut, "activated"));
     QCOMPARE(tree->travelDepth(), qreal(0.5));

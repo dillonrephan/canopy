@@ -106,6 +106,7 @@ ApplicationWindow {
 
             TextField {
                 id: addressField
+                objectName: "addressField"
                 Layout.fillWidth: true
                 text: tree.breadcrumb
                 selectByMouse: true
@@ -743,7 +744,7 @@ ApplicationWindow {
     Shortcut {
         objectName: "travelForwardShortcut"
         sequence: "PageDown"
-        enabled: tree.activeFocus
+        enabled: !addressField.activeFocus
                  && tree.perspectiveProjection
                  && tree.canTravelForward
         onActivated: tree.travelForward()
@@ -752,7 +753,7 @@ ApplicationWindow {
     Shortcut {
         objectName: "travelBackShortcut"
         sequence: "PageUp"
-        enabled: tree.activeFocus
+        enabled: !addressField.activeFocus
                  && tree.perspectiveProjection
                  && tree.canTravelBackward
         onActivated: tree.travelBackward()
