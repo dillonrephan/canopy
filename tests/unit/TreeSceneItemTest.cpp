@@ -1,11 +1,17 @@
 #include "TreeSceneItem.h"
 #include "ThemeRegistry.h"
+#include "ThemeTokens.h"
 
 #include <QDir>
 #include <QFile>
 #include <QImage>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QQmlComponent>
+#include <QQmlEngine>
+#include <QQuickItem>
+#include <QQuickStyle>
+#include <QQuickWindow>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -16,6 +22,7 @@ class TreeSceneItemTest final : public QObject
     Q_OBJECT
 
 private slots:
+    void initTestCase();
     void reducedMotionTravelSnapsWithOneSignal();
     void focusAndUpResetTravelWithOneSignal();
     void liveRemovalClampsRangeAndDepth();
@@ -24,6 +31,7 @@ private slots:
     void planarReducedMotionSnapsCameraWithOneSignal();
     void removedDepartureSnapshotPaintsWithoutHitTarget();
     void removedHistoryEntryIsReconciledBeforeNavigationSignal();
+    void qmlTravelControlsAndShortcutHandlersDriveScene();
 };
 
 namespace {
@@ -131,6 +139,26 @@ QPoint firstChangedPixel(const QImage &left, const QImage &right)
     }
     return {-1, -1};
 }
+
+void clickItem(QQuickWindow *window, QQuickItem *item)
+{
+    QVERIFY(item->isVisible());
+    QVERIFY(item->property("enabled").toBool());
+    const QPointF center = item->mapToScene(item->boundingRect().center());
+    QTest::mouseClick(
+        window, Qt::LeftButton, Qt::NoModifier, center.toPoint());
+}
+}
+
+void TreeSceneItemTest::initTestCase()
+{
+    QQuickStyle::setStyle(QStringLiteral("Basic"));
+    qmlRegisterType<TreeSceneItem>("Canopy", 1, 0, "TreeScene");
+    qmlRegisterSingletonType<ThemeTokens>(
+        "Canopy", 1, 0, "Theme",
+        [](QQmlEngine *, QJSEngine *) -> QObject * {
+            return new ThemeTokens;
+        });
 }
 
 void TreeSceneItemTest::reducedMotionTravelSnapsWithOneSignal()
@@ -397,6 +425,88 @@ void TreeSceneItemTest::removedHistoryEntryIsReconciledBeforeNavigationSignal()
 
     scene.goBack();
     QCOMPARE(scene.breadcrumb(), root.path());
+}
+
+void TreeSceneItemTest::qmlTravelControlsAndShortcutHandlersDriveScene()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    const QDir root(temporaryDirectory.path());
+    for (int index = 0; index < 12; ++index)
+        makeDirectory(root, QStringLiteral("Branch %1").arg(index));
+
+    QQmlEngine engine;
+    const QUrl mainQml = QUrl::fromLocalFile(
+        QStringLiteral(CANOPY_SOURCE_DIR "/qml/Main.qml"));
+    QQmlComponent component(&engine, mainQml);
+    QScopedPointer<QObject> rootObject(component.createWithInitialProperties({
+        {QStringLiteral("initialPath"), temporaryDirectory.path()},
+    }));
+    QVERIFY2(rootObject, qPrintable(component.errorString()));
+
+    auto *window = qobject_cast<QQuickWindow *>(rootObject.get());
+    QVERIFY(window);
+    auto *tree = window->findChild<TreeSceneItem *>(QStringLiteral("treeScene"));
+    auto *backButton = window->findChild<QQuickItem *>(
+        QStringLiteral("travelBackButton"));
+    auto *forwardButton = window->findChild<QQuickItem *>(
+        QStringLiteral("travelForwardButton"));
+    auto *resetButton = window->findChild<QQuickItem *>(
+        QStringLiteral("resetViewButton"));
+    auto *backShortcut = window->findChild<QObject *>(
+        QStringLiteral("travelBackShortcut"));
+    auto *forwardShortcut = window->findChild<QObject *>(
+        QStringLiteral("travelForwardShortcut"));
+    auto *resetShortcut = window->findChild<QObject *>(
+        QStringLiteral("resetViewShortcut"));
+    QVERIFY(tree);
+    QVERIFY(backButton);
+    QVERIFY(forwardButton);
+    QVERIFY(resetButton);
+    QVERIFY(backShortcut);
+    QVERIFY(forwardShortcut);
+    QVERIFY(resetShortcut);
+
+    QVERIFY(QTest::qWaitForWindowExposed(window));
+    QTRY_COMPARE(tree->breadcrumb(), temporaryDirectory.path());
+    QTRY_COMPARE(tree->selectedMaterializedChildCount(), qulonglong(12));
+    QTRY_VERIFY(tree->maximumTravelDepth() >= 1.0);
+    tree->setReducedMotion(true);
+
+    clickItem(window, forwardButton);
+    QCOMPARE(tree->travelDepth(), qreal(0.5));
+    clickItem(window, backButton);
+    QCOMPARE(tree->travelDepth(), qreal(0.0));
+
+    clickItem(window, forwardButton);
+    QCOMPARE(tree->travelDepth(), qreal(0.5));
+    clickItem(window, resetButton);
+    QCOMPARE(tree->travelDepth(), qreal(0.0));
+
+    tree->forceActiveFocus();
+    QVERIFY(tree->hasActiveFocus());
+    QCOMPARE(
+        forwardShortcut->property("sequence").toString(),
+        QStringLiteral("PageDown"));
+    QCOMPARE(
+        backShortcut->property("sequence").toString(),
+        QStringLiteral("PageUp"));
+    QCOMPARE(
+        resetShortcut->property("sequence").toString(),
+        QStringLiteral("Ctrl+0"));
+
+    QVERIFY(forwardShortcut->property("enabled").toBool());
+    QVERIFY(QMetaObject::invokeMethod(forwardShortcut, "activated"));
+    QCOMPARE(tree->travelDepth(), qreal(0.5));
+    QVERIFY(backShortcut->property("enabled").toBool());
+    QVERIFY(QMetaObject::invokeMethod(backShortcut, "activated"));
+    QCOMPARE(tree->travelDepth(), qreal(0.0));
+
+    QVERIFY(QMetaObject::invokeMethod(forwardShortcut, "activated"));
+    QCOMPARE(tree->travelDepth(), qreal(0.5));
+    QVERIFY(resetShortcut->property("enabled").toBool());
+    QVERIFY(QMetaObject::invokeMethod(resetShortcut, "activated"));
+    QCOMPARE(tree->travelDepth(), qreal(0.0));
 }
 
 QTEST_MAIN(TreeSceneItemTest)

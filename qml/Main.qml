@@ -140,6 +140,7 @@ ApplicationWindow {
 
             ToolButton {
                 id: travelBackButton
+                objectName: "travelBackButton"
                 text: "−"
                 visible: tree.perspectiveProjection
                 enabled: tree.canTravelBackward
@@ -172,6 +173,7 @@ ApplicationWindow {
 
             ToolButton {
                 id: travelForwardButton
+                objectName: "travelForwardButton"
                 text: "+"
                 visible: tree.perspectiveProjection
                 enabled: tree.canTravelForward
@@ -194,6 +196,7 @@ ApplicationWindow {
 
             Button {
                 id: resetButton
+                objectName: "resetViewButton"
                 text: "Reset view"
                 enabled: !tree.perspectiveProjection || tree.canResetView
                 Accessible.name: "Reset view"
@@ -232,6 +235,7 @@ ApplicationWindow {
 
             TreeScene {
                 id: tree
+                objectName: "treeScene"
                 anchors.fill: parent
                 focus: true
                 reducedMotion: reducedMotion.checked
@@ -737,6 +741,7 @@ ApplicationWindow {
     }
 
     Shortcut {
+        objectName: "travelForwardShortcut"
         sequence: "PageDown"
         enabled: tree.activeFocus
                  && tree.perspectiveProjection
@@ -745,6 +750,7 @@ ApplicationWindow {
     }
 
     Shortcut {
+        objectName: "travelBackShortcut"
         sequence: "PageUp"
         enabled: tree.activeFocus
                  && tree.perspectiveProjection
@@ -753,6 +759,7 @@ ApplicationWindow {
     }
 
     Shortcut {
+        objectName: "resetViewShortcut"
         sequence: "Ctrl+0"
         enabled: !tree.perspectiveProjection || tree.canResetView
         onActivated: tree.resetView()

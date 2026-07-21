@@ -145,6 +145,7 @@ if(BUILD_TESTING)
         src/rendering/LabelVisibilityPolicy.cpp
         src/rendering/TreeSceneItem.cpp
         src/theme/ThemeRegistry.cpp
+        src/theme/ThemeTokens.cpp
         src/themes/sakura/SakuraMorningTheme.cpp
     )
     target_include_directories(canopy_tree_scene_tests PRIVATE
@@ -159,7 +160,11 @@ if(BUILD_TESTING)
     target_link_libraries(canopy_tree_scene_tests PRIVATE
         Qt6::Concurrent
         Qt6::Quick
+        Qt6::QuickControls2
         Qt6::Test
+    )
+    target_compile_definitions(canopy_tree_scene_tests PRIVATE
+        CANOPY_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
     )
     add_test(NAME canopy_tree_scene_tests COMMAND canopy_tree_scene_tests)
     set_tests_properties(canopy_tree_scene_tests PROPERTIES
