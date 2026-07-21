@@ -102,38 +102,38 @@ TreeSceneItem::TreeSceneItem(QQuickItem *parent)
     m_filesystemModel.setContentsDirectory(m_filesystemModel.rootId());
 }
 
+void TreeSceneItem::geometryChange(
+    const QRectF &newGeometry,
+    const QRectF &oldGeometry)
+{
+    QQuickPaintedItem::geometryChange(newGeometry, oldGeometry);
+    if (usesPerspectiveProjection()
+        && newGeometry.size() != oldGeometry.size()) {
+        relayout();
+    }
+}
+
 void TreeSceneItem::paint(QPainter *painter)
 {
     const ThemeProfile &profile = ThemeRegistry::active();
+    const bool perspective = usesPerspectiveProjection();
+    const qreal presentationZoom = perspective ? 1.0 : m_zoom;
     const ThemePalette &theme = profile.palette;
     const BranchStyle &branches = profile.branches;
     const LabelStyle &labels = profile.labels;
     painter->setRenderHint(QPainter::Antialiasing, true);
     painter->fillRect(boundingRect(), theme.sceneCanvas);
     painter->save();
-    painter->translate(m_pan);
-    painter->scale(m_zoom, m_zoom);
+    if (!perspective) {
+        painter->translate(m_pan);
+        painter->scale(m_zoom, m_zoom);
+    }
 
-    QVector<LayoutNode> labelLayout = m_layout;
-    for (LayoutNode &layout : labelLayout) {
-        const QPointF position = drawnPosition(layout);
-        layout.labelBounds.translate(position - layout.position);
-    }
-    QSet<NodeId> visibleLabels = LabelVisibilityPolicy::visibleLabels(
-        labelLayout, m_navigation.focusedId(), m_navigation.selectedId(),
-        m_hovered, m_zoom);
-    for (const LayoutNode &layout : std::as_const(m_layout)) {
-        if (LabelVisibilityPolicy::depthOpacity(
-                layout.depthOpacity, m_zoom)
-            < labels.rearVisibilityThreshold
-            && layout.id != m_navigation.selectedId()
-            && layout.id != m_hovered) {
-            visibleLabels.remove(layout.id);
-        }
-    }
+    const QSet<NodeId> visibleLabels =
+        visibleLabelIds(presentationZoom);
 
     const auto paintDeparting =
-        [this, painter, &theme, &branches](
+        [this, painter, &theme, &branches, perspective](
             const QVector<LayoutNode> &layouts, qreal opacity) {
         if (opacity <= 0.0 || layouts.isEmpty())
             return;
@@ -146,6 +146,15 @@ void TreeSceneItem::paint(QPainter *painter)
             QColor branchColor = theme.wood;
             branchColor.setAlphaF(
                 branchColor.alphaF() * layout.depthOpacity);
+            if (perspective) {
+                painter->setPen(Qt::NoPen);
+                painter->setBrush(branchColor);
+                painter->drawPath(layout.branchSurface);
+                painter->drawEllipse(layout.position,
+                                     branches.junctionRadius,
+                                     branches.junctionRadius);
+                continue;
+            }
             const qreal depthScale = 1.0 - layout.depthLayer * 0.07;
             const qreal branchWidth = (entry->isDirectory()
                 ? branches.directoryWidth : branches.fileStemWidth)
@@ -166,7 +175,8 @@ void TreeSceneItem::paint(QPainter *painter)
 
     if (const LayoutNode *focusedLayout =
             layoutNode(m_navigation.focusedId());
-        focusedLayout && focusedLayout->crownEnd != focusedLayout->position) {
+        !perspective && focusedLayout
+        && focusedLayout->crownEnd != focusedLayout->position) {
         const QPainterPath crown = drawnCrownPath(*focusedLayout);
         painter->setPen(QPen(theme.wood,
                              branches.focusedWidth * 0.72,
@@ -187,12 +197,11 @@ void TreeSceneItem::paint(QPainter *painter)
         const qreal arrivalOpacity =
             focusArrivalOpacity * liveArrivalOpacity;
         const qreal depthOpacity = LabelVisibilityPolicy::depthOpacity(
-            layout.depthOpacity, m_zoom);
+            layout.depthOpacity, presentationZoom);
         const bool directory = entry->isDirectory();
         const bool selected = layout.id == m_navigation.selectedId();
         const bool hovered = layout.id == m_hovered;
         const bool focused = layout.id == m_navigation.focusedId();
-        const QPainterPath branch = drawnBranchPath(layout);
         QColor branchColor = theme.wood;
         if (hovered)
             branchColor = theme.woodHover;
@@ -202,6 +211,23 @@ void TreeSceneItem::paint(QPainter *painter)
             branchColor.setAlphaF(
                 branchColor.alphaF() * depthOpacity * arrivalOpacity);
 
+        if (perspective) {
+            if (directory && (selected || hovered)) {
+                QColor emphasis = selected ? theme.selection : theme.hover;
+                if (layout.parentContext)
+                    emphasis.setAlphaF(0.55);
+                painter->setPen(QPen(
+                    emphasis, branches.selectionHaloWidth,
+                    Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            } else {
+                painter->setPen(Qt::NoPen);
+            }
+            painter->setBrush(branchColor);
+            painter->drawPath(layout.branchSurface);
+            continue;
+        }
+
+        const QPainterPath branch = drawnBranchPath(layout);
         const qreal depthScale = 1.0 - layout.depthLayer * 0.07;
         const qreal branchWidth = (directory
             ? (focused ? branches.focusedWidth : branches.directoryWidth)
@@ -233,7 +259,7 @@ void TreeSceneItem::paint(QPainter *painter)
         const qreal arrivalOpacity =
             focusArrivalOpacity * liveArrivalOpacity;
         const qreal depthOpacity = LabelVisibilityPolicy::depthOpacity(
-            layout.depthOpacity, m_zoom);
+            layout.depthOpacity, presentationZoom);
         const QPointF position = drawnPosition(layout);
         const bool selected = layout.id == m_navigation.selectedId();
         const bool hovered = layout.id == m_hovered;
@@ -454,6 +480,8 @@ void TreeSceneItem::setShowHidden(bool showHidden)
 
 void TreeSceneItem::resetView()
 {
+    if (usesPerspectiveProjection())
+        return;
     m_cameraAnimation.stop();
     m_pan = QPointF(120.0, 35.0);
     m_zoom = 1.0;
@@ -542,6 +570,12 @@ void TreeSceneItem::mousePressEvent(QMouseEvent *event)
     m_cameraAnimation.stop();
     m_lastPointer = event->position();
     const NodeId hit = nodeAt(event->position());
+    if (usesPerspectiveProjection()
+        && (event->button() == Qt::MiddleButton
+            || hit == InvalidNodeId)) {
+        event->accept();
+        return;
+    }
     if (event->button() == Qt::MiddleButton || hit == InvalidNodeId) {
         m_panning = true;
         setCursor(QCursor(Qt::ClosedHandCursor));
@@ -562,6 +596,10 @@ void TreeSceneItem::mouseDoubleClickEvent(QMouseEvent *event)
         else if (entry)
             openFile(entry->path);
     } else {
+        if (usesPerspectiveProjection()) {
+            event->accept();
+            return;
+        }
         m_panning = false;
         unsetCursor();
         zoomAt(event->position(),
@@ -573,6 +611,8 @@ void TreeSceneItem::mouseDoubleClickEvent(QMouseEvent *event)
 
 void TreeSceneItem::mouseMoveEvent(QMouseEvent *event)
 {
+    if (usesPerspectiveProjection())
+        return;
     if (!m_panning)
         return;
     m_pan += event->position() - m_lastPointer;
@@ -592,6 +632,10 @@ void TreeSceneItem::mouseReleaseEvent(QMouseEvent *event)
 
 void TreeSceneItem::wheelEvent(QWheelEvent *event)
 {
+    if (usesPerspectiveProjection()) {
+        event->accept();
+        return;
+    }
     const qreal factor = qPow(
         ThemeRegistry::active().camera.wheelBase,
         event->angleDelta().y());
@@ -601,6 +645,8 @@ void TreeSceneItem::wheelEvent(QWheelEvent *event)
 
 QPointF TreeSceneItem::toScene(const QPointF &viewPosition) const
 {
+    if (usesPerspectiveProjection())
+        return viewPosition;
     return (viewPosition - m_pan) / m_zoom;
 }
 
@@ -632,14 +678,41 @@ void TreeSceneItem::zoomAt(
 NodeId TreeSceneItem::nodeAt(const QPointF &viewPosition) const
 {
     const QPointF scenePosition = toScene(viewPosition);
+    const auto isHittable = [this](const LayoutNode &layout) {
+        return node(layout.id)
+            && !(m_enteringNodes.contains(layout.id)
+                 && m_transitionProgress < 0.35)
+            && !(m_liveEnteringNodes.contains(layout.id)
+                 && m_liveChangeProgress < 0.35)
+            && layout.depthOpacity >= 0.28;
+    };
+
+    if (usesPerspectiveProjection()) {
+        const QSet<NodeId> visibleLabels = visibleLabelIds(1.0);
+
+        // Endpoints and labels are painted in a second pass above every branch,
+        // so they must receive the first hit pass regardless of branch depth.
+        for (auto it = m_layout.crbegin(); it != m_layout.crend(); ++it) {
+            if (!isHittable(*it))
+                continue;
+            if ((visibleLabels.contains(it->id)
+                 && it->labelBounds.contains(scenePosition))
+                || QLineF(scenePosition, it->position).length()
+                    <= it->radius + 9.0) {
+                return it->id;
+            }
+        }
+
+        for (auto it = m_layout.crbegin(); it != m_layout.crend(); ++it) {
+            if (isHittable(*it) && it->hitArea.contains(scenePosition))
+                return it->id;
+        }
+        return InvalidNodeId;
+    }
+
     for (auto it = m_layout.crbegin(); it != m_layout.crend(); ++it) {
         const FileNode *entry = node(it->id);
-        if (!entry
-            || (m_enteringNodes.contains(it->id)
-                && m_transitionProgress < 0.35)
-            || (m_liveEnteringNodes.contains(it->id)
-                && m_liveChangeProgress < 0.35)
-            || it->depthOpacity < 0.28) {
+        if (!entry || !isHittable(*it)) {
             continue;
         }
 
@@ -665,6 +738,30 @@ NodeId TreeSceneItem::nodeAt(const QPointF &viewPosition) const
     return InvalidNodeId;
 }
 
+QSet<NodeId> TreeSceneItem::visibleLabelIds(
+    qreal presentationZoom) const
+{
+    const LabelStyle &labels = ThemeRegistry::active().labels;
+    QVector<LayoutNode> labelLayout = m_layout;
+    for (LayoutNode &layout : labelLayout) {
+        const QPointF position = drawnPosition(layout);
+        layout.labelBounds.translate(position - layout.position);
+    }
+    QSet<NodeId> visibleLabels = LabelVisibilityPolicy::visibleLabels(
+        labelLayout, m_navigation.focusedId(), m_navigation.selectedId(),
+        m_hovered, presentationZoom);
+    for (const LayoutNode &layout : std::as_const(m_layout)) {
+        if (LabelVisibilityPolicy::depthOpacity(
+                layout.depthOpacity, presentationZoom)
+            < labels.rearVisibilityThreshold
+            && layout.id != m_navigation.selectedId()
+            && layout.id != m_hovered) {
+            visibleLabels.remove(layout.id);
+        }
+    }
+    return visibleLabels;
+}
+
 const FileNode *TreeSceneItem::node(NodeId id) const
 {
     return m_filesystemModel.node(id);
@@ -681,6 +778,12 @@ const LayoutNode *TreeSceneItem::layoutNode(NodeId id) const
 
 QPointF TreeSceneItem::drawnPosition(const LayoutNode &layout) const
 {
+    // Stage 6 switches perspective endpoints atomically and animates only
+    // opacity. This keeps painted branchSurface and hitArea geometry identical;
+    // interpolated perspective surfaces belong in the later motion stage.
+    if (usesPerspectiveProjection())
+        return layout.position;
+
     const auto previous = m_previousPositions.constFind(layout.id);
     QPointF position = layout.position;
     if (previous != m_previousPositions.cend()
@@ -884,4 +987,9 @@ void TreeSceneItem::relayout()
         m_filesystemModel.nodes(), m_navigation.focusedId(), view);
     m_hovered = InvalidNodeId;
     update();
+}
+
+bool TreeSceneItem::usesPerspectiveProjection() const
+{
+    return m_layoutEngine.projectionKind() == ProjectionKind::Perspective;
 }

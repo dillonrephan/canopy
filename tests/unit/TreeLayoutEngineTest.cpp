@@ -92,12 +92,16 @@ private slots:
     void activeThemeProfileIsComplete();
     void worldPlacementMatchesPlanarLanes();
     void worldPlacementRemainsStableWhenChildIsAdded();
+    void layoutEngineDispatchesSelectedProjection();
     void planarProjectionPreservesGeometryAcrossViewState();
     void perspectiveProjectionMatchesKnownCoordinates();
     void perspectiveTravelIsMonotonicAndReversible();
     void perspectiveProjectionCullsPassedGeometry();
+    void perspectiveProjectionKeepsParentContextVisible();
     void perspectiveProjectionPreservesLaneOrdering();
     void perspectiveProjectionIsFiniteAndBounded();
+    void perspectiveProjectionUsesDepthOrder();
+    void perspectiveProjectionTracksViewport();
     void perspectiveProjectionBuildsTaperedSurfaces();
     void perspectiveHitGeometryContainsPaintedSurfaces();
     void layoutIsDeterministic();
@@ -141,6 +145,7 @@ void TreeLayoutEngineTest::activeThemeProfileIsComplete()
 
     QCOMPARE(theme.id, QStringLiteral("sakura-morning"));
     QVERIFY(!theme.name.isEmpty());
+    QCOMPARE(theme.projection, ProjectionKind::Perspective);
     QVERIFY(theme.palette.sceneCanvas.isValid());
     QVERIFY(theme.palette.textDark.isValid());
     QVERIFY(theme.palette.textLight.isValid());
@@ -169,7 +174,7 @@ void TreeLayoutEngineTest::worldPlacementMatchesPlanarLanes()
 {
     const QVector<FileNode> nodes = FakeTreeData::create();
     const WorldLayoutEngine worldEngine;
-    const TreeLayoutEngine planarEngine;
+    const TreeLayoutEngine planarEngine(ProjectionKind::Planar);
     const WorldLayout world = worldEngine.layout(nodes, 1);
     const QVector<LayoutNode> planar = planarEngine.layout(nodes, 1);
 
@@ -222,6 +227,33 @@ void TreeLayoutEngineTest::worldPlacementRemainsStableWhenChildIsAdded()
                  original.distanceAlongParent);
         QCOMPARE(placement.semanticDepth, original.semanticDepth);
     }
+}
+
+void TreeLayoutEngineTest::layoutEngineDispatchesSelectedProjection()
+{
+    const QVector<FileNode> nodes = perspectiveNodes(8);
+    const ViewState view = perspectiveView();
+    const TreeLayoutEngine themeEngine;
+    const TreeLayoutEngine perspectiveEngine(ProjectionKind::Perspective);
+    const TreeLayoutEngine planarEngine(ProjectionKind::Planar);
+
+    QCOMPARE(themeEngine.projectionKind(), ProjectionKind::Perspective);
+    QCOMPARE(planarEngine.projectionKind(), ProjectionKind::Planar);
+
+    const QVector<ProjectedNode> selected =
+        themeEngine.layout(nodes, 1, view);
+    const QVector<ProjectedNode> perspective =
+        perspectiveEngine.layout(nodes, 1, view);
+    const QVector<ProjectedNode> planar =
+        planarEngine.layout(nodes, 1, view);
+
+    QCOMPARE(selected.size(), perspective.size());
+    QVERIFY(!selected.isEmpty());
+    QVERIFY(!selected.first().branchSurface.isEmpty());
+    QCOMPARE(selected.first().position, perspective.first().position);
+    QVERIFY(planar.first().branchSurface.isEmpty());
+    QVERIFY(planar.first().hitArea.isEmpty());
+    QVERIFY(planar.first().position != selected.first().position);
 }
 
 void TreeLayoutEngineTest::planarProjectionPreservesGeometryAcrossViewState()
@@ -339,6 +371,27 @@ void TreeLayoutEngineTest::perspectiveProjectionCullsPassedGeometry()
     QVERIFY(pastEverything.isEmpty());
 }
 
+void TreeLayoutEngineTest::perspectiveProjectionKeepsParentContextVisible()
+{
+    const QVector<FileNode> nodes = FakeTreeData::create();
+    const WorldLayout world = WorldLayoutEngine().layout(nodes, 6);
+    const QVector<ProjectedNode> projected =
+        PerspectiveProjection().project(world, nodes, perspectiveView());
+    const ProjectedNode *parent = projectedNode(projected, 1);
+    const ProjectedNode *focus = projectedNode(projected, 6);
+    QVERIFY(parent);
+    QVERIFY(focus);
+
+    QVERIFY(parent->parentContext);
+    QCOMPARE(
+        parent->cameraDepth,
+        ThemeRegistry::active().perspective.cameraClearance * 0.5);
+    QVERIFY(parent->cameraDepth < focus->cameraDepth);
+    QVERIFY(parent->position.y() > focus->position.y());
+    QVERIFY(!parent->branchSurface.isEmpty());
+    QVERIFY(!parent->hitArea.isEmpty());
+}
+
 void TreeLayoutEngineTest::perspectiveProjectionPreservesLaneOrdering()
 {
     const PerspectiveProjection projection;
@@ -404,6 +457,46 @@ void TreeLayoutEngineTest::perspectiveProjectionIsFiniteAndBounded()
     QVERIFY(farPast.isEmpty());
 }
 
+void TreeLayoutEngineTest::perspectiveProjectionUsesDepthOrder()
+{
+    const PerspectiveProjection projection;
+    const QVector<ProjectedNode> projected = projection.project(
+        perspectiveWorld(8), perspectiveNodes(8), perspectiveView());
+
+    QVERIFY(projected.size() > 2);
+    for (qsizetype i = 1; i < projected.size(); ++i) {
+        QVERIFY2(projected.at(i - 1).cameraDepth
+                     >= projected.at(i).cameraDepth,
+                 "Paint order must run from far growth to near growth");
+    }
+    for (auto it = projected.crbegin() + 1;
+         it != projected.crend(); ++it) {
+        QVERIFY2((it - 1)->cameraDepth <= it->cameraDepth,
+                 "Reverse iteration must hit near growth first");
+    }
+}
+
+void TreeLayoutEngineTest::perspectiveProjectionTracksViewport()
+{
+    const PerspectiveProjection projection;
+    const QVector<FileNode> nodes = perspectiveNodes(1);
+    const WorldLayout world = perspectiveWorld(1);
+    const QVector<ProjectedNode> compact = projection.project(
+        world, nodes, {.viewport = {800.0, 600.0}});
+    const QVector<ProjectedNode> wide = projection.project(
+        world, nodes, {.viewport = {1400.0, 900.0}});
+    const ProjectedNode *compactFocus = projectedNode(compact, 1);
+    const ProjectedNode *wideFocus = projectedNode(wide, 1);
+    QVERIFY(compactFocus);
+    QVERIFY(wideFocus);
+
+    QCOMPARE(compactFocus->position.x(), qreal(400.0));
+    QCOMPARE(wideFocus->position.x(), qreal(700.0));
+    QVERIFY(wideFocus->position.y() > compactFocus->position.y());
+    QVERIFY(wideFocus->branchSurface.boundingRect().center().x()
+            > compactFocus->branchSurface.boundingRect().center().x());
+}
+
 void TreeLayoutEngineTest::perspectiveProjectionBuildsTaperedSurfaces()
 {
     const PerspectiveProjection projection;
@@ -459,7 +552,7 @@ void TreeLayoutEngineTest::perspectiveHitGeometryContainsPaintedSurfaces()
 void TreeLayoutEngineTest::layoutIsDeterministic()
 {
     const QVector<FileNode> nodes = FakeTreeData::create();
-    const TreeLayoutEngine engine;
+    const TreeLayoutEngine engine(ProjectionKind::Planar);
     const QVector<LayoutNode> first = engine.layout(nodes, 1);
     const QVector<LayoutNode> second = engine.layout(nodes, 1);
 
@@ -479,7 +572,7 @@ void TreeLayoutEngineTest::layoutIsDeterministic()
 void TreeLayoutEngineTest::focusedDirectoryKeepsParentContext()
 {
     const QVector<FileNode> nodes = FakeTreeData::create();
-    const TreeLayoutEngine engine;
+    const TreeLayoutEngine engine(ProjectionKind::Planar);
     const NodeId projectsId = 6;
     const QVector<LayoutNode> layout = engine.layout(nodes, projectsId);
 
@@ -493,7 +586,7 @@ void TreeLayoutEngineTest::focusedDirectoryKeepsParentContext()
 void TreeLayoutEngineTest::wideDirectoryUsesUniquePositions()
 {
     const QVector<FileNode> nodes = FakeTreeData::create();
-    const TreeLayoutEngine engine;
+    const TreeLayoutEngine engine(ProjectionKind::Planar);
     const NodeId downloadsId = 5;
     const QVector<LayoutNode> layout = engine.layout(nodes, downloadsId);
     QSet<QString> positions;
@@ -511,7 +604,7 @@ void TreeLayoutEngineTest::wideDirectoryUsesUniquePositions()
 void TreeLayoutEngineTest::wideDirectoryReservesLabelSpace()
 {
     const QVector<FileNode> nodes = FakeTreeData::create();
-    const TreeLayoutEngine engine;
+    const TreeLayoutEngine engine(ProjectionKind::Planar);
     const NodeId downloadsId = 5;
     const QVector<LayoutNode> layout = engine.layout(nodes, downloadsId);
     QVector<QRectF> labelBounds;
@@ -536,7 +629,7 @@ void TreeLayoutEngineTest::wideDirectoryReservesLabelSpace()
 void TreeLayoutEngineTest::homeDirectChildrenReserveLabelSpace()
 {
     const QVector<FileNode> nodes = FakeTreeData::create();
-    const TreeLayoutEngine engine;
+    const TreeLayoutEngine engine(ProjectionKind::Planar);
     const NodeId homeId = 1;
     const QVector<LayoutNode> layout = engine.layout(nodes, homeId);
     QVector<QRectF> labelBounds;
@@ -557,7 +650,7 @@ void TreeLayoutEngineTest::homeDirectChildrenReserveLabelSpace()
 void TreeLayoutEngineTest::normalZoomPrioritizesHomeLevelLabels()
 {
     const QVector<FileNode> nodes = FakeTreeData::create();
-    const TreeLayoutEngine engine;
+    const TreeLayoutEngine engine(ProjectionKind::Planar);
     const NodeId homeId = 1;
     const QVector<LayoutNode> layout = engine.layout(nodes, homeId);
     const QSet<NodeId> visible = LabelVisibilityPolicy::visibleLabels(
@@ -572,7 +665,7 @@ void TreeLayoutEngineTest::normalZoomPrioritizesHomeLevelLabels()
 void TreeLayoutEngineTest::lowZoomKeepsFocusAndEmphasizedLabels()
 {
     const QVector<FileNode> nodes = FakeTreeData::create();
-    const TreeLayoutEngine engine;
+    const TreeLayoutEngine engine(ProjectionKind::Planar);
     const NodeId homeId = 1;
     const NodeId selectedGrandchildId = 7;
     const NodeId hoveredGrandchildId = 11;
@@ -586,7 +679,7 @@ void TreeLayoutEngineTest::lowZoomKeepsFocusAndEmphasizedLabels()
 void TreeLayoutEngineTest::closeZoomRevealsOnlyNonOverlappingDescendants()
 {
     const QVector<FileNode> nodes = FakeTreeData::create();
-    const TreeLayoutEngine engine;
+    const TreeLayoutEngine engine(ProjectionKind::Planar);
     const NodeId homeId = 1;
     const QVector<LayoutNode> layout = engine.layout(nodes, homeId);
     const QSet<NodeId> visible = LabelVisibilityPolicy::visibleLabels(
@@ -643,7 +736,7 @@ void TreeLayoutEngineTest::navigationStateTracksSelectionAndHistory()
 void TreeLayoutEngineTest::layoutProvidesConnectedBranchGeometry()
 {
     const QVector<FileNode> nodes = FakeTreeData::create();
-    const TreeLayoutEngine engine;
+    const TreeLayoutEngine engine(ProjectionKind::Planar);
     const NodeId homeId = 1;
     const QVector<LayoutNode> layout = engine.layout(nodes, homeId);
 
@@ -676,7 +769,7 @@ void TreeLayoutEngineTest::layoutProvidesConnectedBranchGeometry()
 void TreeLayoutEngineTest::directChildrenUseStaggeredCorridors()
 {
     const QVector<FileNode> nodes = FakeTreeData::create();
-    const TreeLayoutEngine engine;
+    const TreeLayoutEngine engine(ProjectionKind::Planar);
     const QVector<LayoutNode> layout = engine.layout(nodes, 1);
     const auto focused = std::ranges::find_if(
         layout, [](const LayoutNode &node) { return node.id == NodeId(1); });
@@ -703,7 +796,7 @@ void TreeLayoutEngineTest::directChildrenUseStaggeredCorridors()
 void TreeLayoutEngineTest::corridorsRemainStableWhenChildIsAdded()
 {
     QVector<FileNode> nodes = FakeTreeData::create();
-    TreeLayoutEngine engine;
+    TreeLayoutEngine engine(ProjectionKind::Planar);
     const QVector<LayoutNode> before = engine.layout(nodes, 1);
     QHash<NodeId, LayoutNode> originalChildren;
     for (const LayoutNode &node : before) {
@@ -737,7 +830,7 @@ void TreeLayoutEngineTest::corridorsRemainStableWhenChildIsAdded()
 void TreeLayoutEngineTest::busyDirectoriesFadeRearCorridors()
 {
     const QVector<FileNode> nodes = FakeTreeData::create();
-    const TreeLayoutEngine engine;
+    const TreeLayoutEngine engine(ProjectionKind::Planar);
     const NodeId downloadsId = 5;
     const QVector<LayoutNode> layout = engine.layout(nodes, downloadsId);
     qsizetype primaryCorridors = 0;
@@ -832,7 +925,7 @@ void TreeLayoutEngineTest::layoutBoundsMaterializedExtremeChildren()
         });
     }
 
-    const TreeLayoutEngine engine;
+    const TreeLayoutEngine engine(ProjectionKind::Planar);
     const QVector<LayoutNode> layout = engine.layout(nodes, 1);
 
     QCOMPARE(layout.size(), DirectoryPresentationPolicy::VisualChildLimit + 1);

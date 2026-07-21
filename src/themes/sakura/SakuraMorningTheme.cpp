@@ -6,6 +6,7 @@ const ThemeProfile &SakuraMorningTheme::profile()
         .version = 1,
         .id = QStringLiteral("sakura-morning"),
         .name = QStringLiteral("Sakura Morning"),
+        .projection = ProjectionKind::Perspective,
         .palette = {
             .sceneCanvas = QColor("#c8d3b6"),
             .shellSurface = QColor("#e5dcc5"),

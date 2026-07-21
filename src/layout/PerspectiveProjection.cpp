@@ -196,7 +196,11 @@ QVector<ProjectedNode> PerspectiveProjection::project(
         WorldPoint point;
         switch (placement.role) {
         case WorldNodeRole::ParentContext:
-            point.depth = -1.0;
+            // Keep back context nearer than the focused trunk without placing
+            // it on the camera plane, where it would be deterministically
+            // culled. Deriving this from camera clearance keeps the placement
+            // coherent if the profile changes its near-camera scale.
+            point.depth = -profile.cameraClearance * 0.5;
             break;
         case WorldNodeRole::Focus:
             break;
@@ -276,6 +280,14 @@ QVector<ProjectedNode> PerspectiveProjection::project(
             node.branchSurface, profile.hitPadding);
         result.append(node);
     }
+
+    // Projected surfaces are returned in painter order. The renderer reverses
+    // this order for hit testing so overlapping near growth wins input.
+    std::stable_sort(
+        result.begin(), result.end(),
+        [](const ProjectedNode &left, const ProjectedNode &right) {
+            return left.cameraDepth > right.cameraDepth;
+        });
 
     return result;
 }

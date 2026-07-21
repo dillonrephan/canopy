@@ -132,6 +132,7 @@ ApplicationWindow {
 
             Label {
                 text: Math.round(tree.zoom * 100) + "%"
+                visible: !tree.perspectiveProjection
                 color: Theme.textDark
                 opacity: 0.62
                 font.pixelSize: 12
@@ -140,6 +141,7 @@ ApplicationWindow {
             Button {
                 id: resetButton
                 text: "Reset view"
+                visible: !tree.perspectiveProjection
                 onClicked: tree.resetView()
 
                 contentItem: Label {
@@ -201,7 +203,9 @@ ApplicationWindow {
                 Label {
                     id: instruction
                     anchors.centerIn: parent
-                    text: "Scroll to zoom  •  drag to pan  •  click to inspect  •  double-click a branch to enter, or open space to travel"
+                    text: tree.perspectiveProjection
+                          ? "Click to inspect  •  double-click a branch to enter  •  depth travel is coming next"
+                          : "Scroll to zoom  •  drag to pan  •  click to inspect  •  double-click a branch to enter, or open space to travel"
                     color: Theme.textDark
                     opacity: 0.78
                     font.pixelSize: 12

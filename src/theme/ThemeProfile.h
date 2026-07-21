@@ -6,6 +6,11 @@
 #include <QString>
 #include <QtTypes>
 
+enum class ProjectionKind {
+    Planar,
+    Perspective
+};
+
 struct ThemePalette {
     QColor sceneCanvas;
     QColor shellSurface;
@@ -122,6 +127,7 @@ struct ThemeProfile {
     int version = 1;
     QString id;
     QString name;
+    ProjectionKind projection = ProjectionKind::Planar;
     ThemePalette palette;
     BranchStyle branches;
     LabelStyle labels;

@@ -1,5 +1,7 @@
 #include "TreeLayoutEngine.h"
 
+#include "ThemeRegistry.h"
+
 QVector<ProjectedNode> TreeLayoutEngine::layout(
     const QVector<FileNode> &nodes,
     NodeId focusedId,
@@ -7,5 +9,12 @@ QVector<ProjectedNode> TreeLayoutEngine::layout(
 {
     const WorldLayout world =
         m_worldLayoutEngine.layout(nodes, focusedId);
-    return m_projection.project(world, nodes, view);
+    if (projectionKind() == ProjectionKind::Perspective)
+        return m_perspectiveProjection.project(world, nodes, view);
+    return m_planarProjection.project(world, nodes, view);
+}
+
+ProjectionKind TreeLayoutEngine::projectionKind() const
+{
+    return m_projectionOverride.value_or(ThemeRegistry::active().projection);
 }

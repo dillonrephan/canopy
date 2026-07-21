@@ -132,7 +132,11 @@ Each numbered stage should be a coherent, buildable commit:
 4. **Complete:** Add a perspective projection beside the planar reference.
 5. **Complete:** Add projected hit geometry and tests before switching
    interaction.
-6. Render tapered trunk and corridor surfaces.
+6. **Complete:** Render tapered trunk and corridor surfaces. Perspective output
+   is viewport-space, paints far-to-near, and uses matching near-to-far hit
+   geometry after a higher-priority visible-label/endpoint pass. Focus/live
+   geometry switches atomically with opacity-only arrival at this stage so
+   animated paint and hit endpoints cannot diverge.
 7. Enforce the six-foreground plus two-fog presentation budget.
 8. Convert wheel and open-space travel from canvas scaling to camera movement.
 9. Test live additions, removals, focus transitions, reduced motion, crowded

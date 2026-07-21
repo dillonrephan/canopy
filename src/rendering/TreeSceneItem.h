@@ -34,6 +34,7 @@ class TreeSceneItem : public QQuickPaintedItem
     Q_PROPERTY(DirectoryContentsModel *contentsModel READ contentsModel CONSTANT)
     Q_PROPERTY(QString breadcrumb READ breadcrumb NOTIFY navigationChanged)
     Q_PROPERTY(qreal zoom READ zoom NOTIFY cameraChanged)
+    Q_PROPERTY(bool perspectiveProjection READ usesPerspectiveProjection CONSTANT)
     Q_PROPERTY(bool canGoBack READ canGoBack NOTIFY navigationChanged)
     Q_PROPERTY(bool canGoUp READ canGoUp NOTIFY navigationChanged)
     Q_PROPERTY(bool reducedMotion READ reducedMotion WRITE setReducedMotion NOTIFY reducedMotionChanged)
@@ -61,6 +62,7 @@ public:
     }
     [[nodiscard]] QString breadcrumb() const;
     [[nodiscard]] qreal zoom() const noexcept { return m_zoom; }
+    [[nodiscard]] bool usesPerspectiveProjection() const;
     [[nodiscard]] bool canGoBack() const noexcept { return m_navigation.canGoBack(); }
     [[nodiscard]] bool canGoUp() const;
     [[nodiscard]] bool reducedMotion() const noexcept { return m_reducedMotion; }
@@ -88,6 +90,9 @@ signals:
     void pathMessageChanged();
 
 protected:
+    void geometryChange(
+        const QRectF &newGeometry,
+        const QRectF &oldGeometry) override;
     void hoverMoveEvent(QHoverEvent *event) override;
     void hoverLeaveEvent(QHoverEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
@@ -99,6 +104,8 @@ protected:
 private:
     [[nodiscard]] QPointF toScene(const QPointF &viewPosition) const;
     [[nodiscard]] NodeId nodeAt(const QPointF &viewPosition) const;
+    [[nodiscard]] QSet<NodeId> visibleLabelIds(
+        qreal presentationZoom) const;
     [[nodiscard]] const FileNode *node(NodeId id) const;
     [[nodiscard]] const LayoutNode *layoutNode(NodeId id) const;
     [[nodiscard]] QPointF drawnPosition(const LayoutNode &node) const;

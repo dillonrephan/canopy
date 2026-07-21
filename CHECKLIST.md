@@ -28,17 +28,27 @@ check `avahi-daemon.socket`; the existing Toolbx binds that host socket.
 - World/planar separation tag: `checkpoint/world-planar-separation`
 - The modular Sakura profile, stable world placement, and planar projection are
   implemented and pushed.
-- `PerspectiveProjection` exists beside the planar reference, remains dormant,
-  and has fixed-coordinate mathematical tests plus tapered projected surfaces
-  with matching hit geometry.
-- `TreeLayoutEngine` still selects `PlanarProjection`; the running application
-  has no perspective behavior yet.
-- The full build, QML lint, and test suite passed after adding the dormant
-  projector.
+- The Sakura profile now explicitly selects perspective projection at the
+  theme/layout boundary. Both `PerspectiveProjection` and the planar rollback
+  projector remain available; projection/layout regression tests pin the
+  planar geometry explicitly.
+- The renderer treats perspective output as viewport-space geometry, paints
+  tapered `branchSurface` paths far-to-near, then hit-tests visible labels and
+  endpoints before matching `hitArea` paths, each near-to-far. Viewport size
+  changes trigger reprojection.
+- Perspective focus/live endpoints switch atomically at this stage. Arrivals
+  and resolvable focus departures use opacity without interpolating endpoints,
+  so painted and hit geometry cannot diverge. Live-removal departure remains
+  unresolved; full projected-surface interpolation is deferred.
+- Legacy pan, wheel zoom, blank-space zoom, and reset are explicit no-ops in
+  perspective mode until camera travel is implemented. The planar input and
+  transform paths remain unchanged.
+- The full build, QML lint, and test suite passed, and the final isolated frame
+  was inspected at `/tmp/canopy-stage6-perspective-final.png`.
 
-## Active task: render the dormant perspective surfaces
+## Active task: validate the active perspective presentation budget
 
-Perspective math is now locked by tests:
+Perspective math and renderer dispatch are now locked by tests:
 
 - Perspective lane spacing is 160 units.
 - Geometry is culled after the camera passes it rather than frozen nearby.
@@ -47,6 +57,8 @@ Perspective math is now locked by tests:
 - Reversing travel restores the exact prior projection.
 - Extreme travel depths remain finite.
 - Left/right lane ordering cannot flip.
+- Non-root focus retains deterministic, profile-derived parent context in
+  front of the focused trunk.
 - Projection is bounded to six foreground corridors and two fog hints.
 
 Projected geometry is now locked by tests:
@@ -58,14 +70,31 @@ Projected geometry is now locked by tests:
 - Hit geometry contains the complete surface without remote false targets.
 - Culled nodes produce neither projected surfaces nor hit geometry.
 
-Before activating the perspective projector:
+Stage 6 is complete:
 
-- Teach the renderer to paint `branchSurface` when perspective is selected.
-- Teach hit-testing to use the matching `hitArea`.
-- Keep the planar path and its current hit behavior unchanged.
-- Capture and inspect the first perspective frame before adding camera input.
-- Keep the planar projector available until perspective rendering and hit
-  geometry satisfy the same correctness contracts.
+- The renderer paints the projected tapered surfaces rather than legacy lines.
+- Hit-testing mirrors paint layers: visible labels/endpoints are considered
+  first, followed by exact padded surface geometry in reverse depth order.
+- The final frame showed a centered broad trunk, readable tapered corridors,
+  correct near-over-far occlusion, and usable labels without planar transforms.
+- Perspective input hints state that depth travel is not active yet.
+
+Before implementing camera input:
+
+- Exercise directories with more than eight projected children and confirm the
+  six-foreground plus two-fog budget in paint and hit behavior.
+- Check that overlapping focused-trunk and corridor targets resolve to the
+  intended visible endpoint or near surface. This renderer-level layering is
+  kept as a small shared-visibility code path but is not yet directly unit
+  tested through `TreeSceneItem`.
+- Decide how projected surfaces interpolate during focus/live transitions;
+  preserve the current atomic geometry fallback until paint and hit can derive
+  from one interpolated path.
+- Treat live-removal departure animation as unresolved: removed semantic nodes
+  are no longer available to `paintDeparting`, so their old surfaces may not
+  fade even though focus departures and additions do.
+- Keep the planar projector available until perspective navigation satisfies
+  the same correctness and accessibility contracts.
 
 See `docs/theme-architecture.md` for the full staged migration.
 
