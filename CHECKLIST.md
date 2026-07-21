@@ -15,6 +15,8 @@ literal, and current.
 - Check `requirements-dev.txt` whenever dependencies are installed or changed.
 - Before launching Canopy, close existing Canopy processes and start exactly
   one fresh instance.
+- Prefer `./scripts/capture-virtual.sh` for inspection screenshots so the real
+  desktop keeps its focused window.
 
 If `canopy-dev` fails to start because `/run/avahi-daemon/socket` is missing,
 check `avahi-daemon.socket`; the existing Toolbx binds that host socket.

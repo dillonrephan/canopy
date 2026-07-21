@@ -113,6 +113,19 @@ Pass an optional directory to open it directly:
 toolbox run --container canopy-dev ./build-toolbox/canopy ~/.config
 ```
 
+Capture a frame on an isolated virtual KWin display without opening or focusing
+a window on the real desktop:
+
+```bash
+./scripts/capture-virtual.sh /tmp/canopy.png ~/.config
+```
+
+The output path and directory are optional. The host-side capture harness uses
+`kwin_wayland`, `spectacle`, and `dbus-run-session`; it runs the existing host-
+visible build inside a private D-Bus and Wayland session, then tears the session
+down automatically. Override the virtual display with `CANOPY_CAPTURE_WIDTH`,
+`CANOPY_CAPTURE_HEIGHT`, or `CANOPY_CAPTURE_DELAY` when needed.
+
 Static-check the QML:
 
 ```bash
