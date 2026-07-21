@@ -50,6 +50,10 @@ public:
     explicit TreeSceneItem(QQuickItem *parent = nullptr);
     explicit TreeSceneItem(
         const QString &rootPath, QQuickItem *parent = nullptr);
+    TreeSceneItem(
+        const QString &rootPath,
+        ProjectionKind projectionKind,
+        QQuickItem *parent = nullptr);
 
     void paint(QPainter *painter) override;
 
@@ -68,6 +72,7 @@ public:
         return m_filesystemModel.contentsModel();
     }
     [[nodiscard]] QString breadcrumb() const;
+    [[nodiscard]] QPointF pan() const noexcept { return m_pan; }
     [[nodiscard]] qreal zoom() const noexcept { return m_zoom; }
     [[nodiscard]] qreal travelDepth() const noexcept { return m_travelDepth; }
     [[nodiscard]] qreal maximumTravelDepth() const noexcept

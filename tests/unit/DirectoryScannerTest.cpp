@@ -25,6 +25,7 @@ private slots:
     void supportsCancellation();
     void controllerDeliversOnlyTheLatestRequest();
     void contentsModelPagesWithoutRetainingEarlierPages();
+    void filesystemModelReportsExactReconciliationDeltas();
     void filesystemModelObservesExternalDirectoryChanges();
 };
 
@@ -302,6 +303,106 @@ void DirectoryScannerTest::contentsModelPagesWithoutRetainingEarlierPages()
     QCOMPARE(
         model.data(model.index(0), DirectoryContentsModel::NameRole).toString(),
         QStringLiteral("entry-000.txt"));
+}
+
+void DirectoryScannerTest::filesystemModelReportsExactReconciliationDeltas()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    QDir root(temporaryDirectory.path());
+    for (int index = 0; index < 10; ++index) {
+        createFile(root.filePath(
+            QStringLiteral("entry-%1.txt").arg(
+                index, 2, 10, QLatin1Char('0'))));
+    }
+
+    FilesystemTreeModel model(root.path());
+    QVector<TreeChangeSet> changes;
+    connect(&model, &FilesystemTreeModel::treeChanged,
+            this, [&changes](const TreeChangeSet &change) {
+                changes.append(change);
+            });
+    const auto hasReconciliation = [&changes] {
+        return std::ranges::any_of(
+            changes, [](const TreeChangeSet &change) {
+                return change.reason == TreeChangeReason::Reconciled;
+            });
+    };
+    const auto latestReconciliation = [&changes] {
+        return std::ranges::find_if(
+            changes.crbegin(), changes.crend(),
+            [](const TreeChangeSet &change) {
+                return change.reason == TreeChangeReason::Reconciled;
+            });
+    };
+
+    QTRY_VERIFY_WITH_TIMEOUT(hasReconciliation(), 3000);
+    QCOMPARE(model.node(model.rootId())->children.size(), qsizetype(10));
+    const auto initialReconciliation = latestReconciliation();
+    QVERIFY(initialReconciliation != changes.crend());
+    QVERIFY(initialReconciliation->added.isEmpty());
+    QVERIFY(initialReconciliation->removed.isEmpty());
+    QVERIFY(std::ranges::any_of(
+        changes, [](const TreeChangeSet &change) {
+            return change.reason == TreeChangeReason::Progress
+                && !change.added.isEmpty();
+        }));
+
+    changes.clear();
+    model.setIncludeHidden(true);
+    QTRY_VERIFY_WITH_TIMEOUT(hasReconciliation(), 3000);
+    const auto unchangedReconciliation = latestReconciliation();
+    QVERIFY(unchangedReconciliation != changes.crend());
+    QVERIFY(unchangedReconciliation->added.isEmpty());
+    QVERIFY(unchangedReconciliation->removed.isEmpty());
+
+    changes.clear();
+    const QString addedPath =
+        root.filePath(QStringLiteral("entry-10.txt"));
+    createFile(addedPath, "new growth");
+    QTRY_VERIFY_WITH_TIMEOUT(hasReconciliation(), 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(
+        model.node(model.rootId())->totalChildCount, quint64(11), 5000);
+    const auto addedNode = std::ranges::find_if(
+        model.nodes(), [&addedPath](const FileNode &node) {
+            return node.path == addedPath;
+        });
+    QVERIFY(addedNode != model.nodes().cend());
+    QSet<NodeId> reportedAdded;
+    QSet<NodeId> reportedRemoved;
+    for (const TreeChangeSet &change : std::as_const(changes)) {
+        for (const NodeId id : change.added)
+            reportedAdded.insert(id);
+        for (const NodeId id : change.removed)
+            reportedRemoved.insert(id);
+    }
+    QCOMPARE(reportedAdded, QSet<NodeId>({addedNode->id}));
+    QVERIFY(reportedRemoved.isEmpty());
+    const auto additionReconciliation = latestReconciliation();
+    QVERIFY(additionReconciliation != changes.crend());
+    QVERIFY(additionReconciliation->added.isEmpty());
+    QVERIFY(additionReconciliation->removed.isEmpty());
+
+    const NodeId removedId = addedNode->id;
+    changes.clear();
+    QVERIFY(QFile::remove(addedPath));
+    QTRY_VERIFY_WITH_TIMEOUT(hasReconciliation(), 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(
+        model.node(model.rootId())->totalChildCount, quint64(10), 5000);
+    reportedAdded.clear();
+    reportedRemoved.clear();
+    for (const TreeChangeSet &change : std::as_const(changes)) {
+        for (const NodeId id : change.added)
+            reportedAdded.insert(id);
+        for (const NodeId id : change.removed)
+            reportedRemoved.insert(id);
+    }
+    QVERIFY(reportedAdded.isEmpty());
+    QCOMPARE(reportedRemoved, QSet<NodeId>({removedId}));
+    const auto removalReconciliation = latestReconciliation();
+    QVERIFY(removalReconciliation != changes.crend());
+    QVERIFY(removalReconciliation->added.isEmpty());
+    QCOMPARE(removalReconciliation->removed, QVector<NodeId>({removedId}));
 }
 
 void DirectoryScannerTest::filesystemModelObservesExternalDirectoryChanges()

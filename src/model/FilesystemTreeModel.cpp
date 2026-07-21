@@ -254,11 +254,20 @@ void FilesystemTreeModel::applyScanResult(
     directory->totalChildCount = result.totalEntryCount;
     directory->directoryState = result.state;
     directory->directoryStatus = result.status;
-    const QVector<NodeId> added = appendScannedEntries(id, result.entries);
+    static_cast<void>(appendScannedEntries(id, result.entries));
     directory = mutableNode(id);
+    const QSet<NodeId> previousIds(
+        previousChildren.cbegin(), previousChildren.cend());
+    const QSet<NodeId> currentIds(
+        directory->children.cbegin(), directory->children.cend());
+    QVector<NodeId> added;
+    for (const NodeId currentId : std::as_const(directory->children)) {
+        if (!previousIds.contains(currentId))
+            added.append(currentId);
+    }
     QVector<NodeId> removed;
     for (const NodeId previousId : previousChildren) {
-        if (!directory->children.contains(previousId))
+        if (!currentIds.contains(previousId))
             removed.append(previousId);
     }
     emit treeChanged({

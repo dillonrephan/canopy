@@ -37,8 +37,20 @@ TreeSceneItem::TreeSceneItem(QQuickItem *parent)
 
 TreeSceneItem::TreeSceneItem(
     const QString &rootPath, QQuickItem *parent)
+    : TreeSceneItem(
+        rootPath,
+        ThemeRegistry::active().projection,
+        parent)
+{
+}
+
+TreeSceneItem::TreeSceneItem(
+    const QString &rootPath,
+    ProjectionKind projectionKind,
+    QQuickItem *parent)
     : QQuickPaintedItem(parent),
-      m_filesystemModel(rootPath)
+      m_filesystemModel(rootPath),
+      m_layoutEngine(projectionKind)
 {
     const ThemeProfile &theme = ThemeRegistry::active();
     setAcceptedMouseButtons(Qt::LeftButton | Qt::MiddleButton);
@@ -504,6 +516,7 @@ void TreeSceneItem::setReducedMotion(bool reducedMotion)
     if (m_reducedMotion == reducedMotion)
         return;
     m_reducedMotion = reducedMotion;
+    bool planarCameraSnapped = false;
     if (reducedMotion && m_focusAnimation.state() == QAbstractAnimation::Running)
         m_focusAnimation.stop();
     if (reducedMotion
@@ -515,6 +528,7 @@ void TreeSceneItem::setReducedMotion(bool reducedMotion)
         m_cameraAnimation.stop();
         m_pan = m_cameraTargetPan;
         m_zoom = m_cameraTargetZoom;
+        planarCameraSnapped = true;
     }
     if (reducedMotion
         && m_travelAnimation.state() == QAbstractAnimation::Running) {
@@ -536,6 +550,8 @@ void TreeSceneItem::setReducedMotion(bool reducedMotion)
     m_departingLayout.clear();
     m_liveDepartingLayout.clear();
     update();
+    if (planarCameraSnapped)
+        emit cameraChanged();
     emit reducedMotionChanged();
 }
 

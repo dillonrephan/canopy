@@ -105,7 +105,8 @@ Stage 7 is complete:
 - The inspected 29-entry frame stayed bounded and reported `+21 more in
   Contents`, exactly 29 known entries minus eight projected direct children.
 
-Stage 8 is complete in code and awaiting visual validation:
+Stage 8 is complete in code with deterministic offscreen renderer validation;
+an isolated end-to-end input sweep remains:
 
 - Travel range is recomputed from complete stable world layout on focus, live
   changes, and resize; current and pending depths clamp deterministically.
@@ -119,19 +120,27 @@ Stage 8 is complete in code and awaiting visual validation:
   double-click expose the same bounded policy without reusing planar camera
   state.
 - Pure policy tests cover accumulation, reversal, pixel fallback, resets, range
-  shrinkage, malformed values, and projection inversion. The full build, QML
-  lint, and unit suite pass without launching either display path.
+  shrinkage, malformed values, and projection inversion. Offscreen scene tests
+  prove that forward travel changes painted output, reversal restores it
+  bit-for-bit, focus resets to depth zero, and reduced motion reaches the same
+  final frame as an immediate snap.
+- Stage 9 validation also locks exact live-scan deltas and the planar
+  reduced-motion camera notification. Unchanged scan survivors are no longer
+  reported as new arrivals at reconciliation.
 
-Before visual validation:
+Remaining Stage 9 validation:
 
-- Direct `TreeSceneItem` paint/hit layering still lacks its own unit harness;
-  keep the existing shared-label and two-pass implementation small.
+- Complete an isolated interactive sweep of wheel/touchpad, Page Up/Down,
+  visible controls, reset, open-space travel, and focus/backtracking. The
+  startup frame is inspected; compositor-level synthetic key delivery was
+  inconclusive and is not counted as passing evidence.
 - Decide how projected surfaces interpolate during focus/live transitions;
   preserve the current atomic geometry fallback until paint and hit can derive
   from one interpolated path.
-- Treat live-removal departure animation as unresolved: removed semantic nodes
-  are no longer available to `paintDeparting`, so their old surfaces may not
-  fade even though focus departures and additions do.
+- Replace retained removed semantics with renderer-owned departure snapshots
+  before pruning stale model nodes. Direct erasure would currently break
+  `paintDeparting`; indefinite retention risks stale inspector state and
+  unbounded churn memory.
 - Keep the planar projector available until perspective navigation satisfies
   the same correctness and accessibility contracts.
 
