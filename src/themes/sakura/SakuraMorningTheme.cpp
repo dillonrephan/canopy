@@ -105,6 +105,8 @@ const ThemeProfile &SakuraMorningTheme::profile()
             .fileCorridorWidth = 30.0,
             .corridorTipRatio = 0.48,
             .hitPadding = 10.0,
+            .wheelTravelPerStep = 0.5,
+            .touchpadPixelsPerStep = 40.0,
             .foregroundCorridorCount = 6,
             .fogHintCount = 2
         },

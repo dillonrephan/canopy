@@ -115,6 +115,8 @@ struct PerspectiveProfile {
     qreal fileCorridorWidth = 30.0;
     qreal corridorTipRatio = 0.48;
     qreal hitPadding = 10.0;
+    qreal wheelTravelPerStep = 0.5;
+    qreal touchpadPixelsPerStep = 40.0;
     int foregroundCorridorCount = 6;
     int fogHintCount = 2;
 };

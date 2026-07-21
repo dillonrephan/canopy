@@ -18,3 +18,11 @@ ProjectionKind TreeLayoutEngine::projectionKind() const
 {
     return m_projectionOverride.value_or(ThemeRegistry::active().projection);
 }
+
+PerspectiveTravelRange TreeLayoutEngine::perspectiveTravelRange(
+    const QVector<FileNode> &nodes,
+    NodeId focusedId) const
+{
+    return PerspectiveCameraPolicy::travelRange(
+        m_worldLayoutEngine.layout(nodes, focusedId));
+}

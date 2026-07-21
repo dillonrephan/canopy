@@ -2,6 +2,7 @@
 #include "FakeTreeData.h"
 #include "LabelVisibilityPolicy.h"
 #include "NavigationState.h"
+#include "PerspectiveCameraPolicy.h"
 #include "PerspectivePresentationPolicy.h"
 #include "PerspectiveProjection.h"
 #include "ThemeRegistry.h"
@@ -12,6 +13,8 @@
 #include <QtTest>
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 
 namespace {
 QVector<FileNode> perspectiveNodes(int childCount)
@@ -146,7 +149,11 @@ private slots:
     void planarProjectionPreservesGeometryAcrossViewState();
     void perspectiveProjectionMatchesKnownCoordinates();
     void perspectiveTravelIsMonotonicAndReversible();
-    void perspectiveProjectionCullsPassedGeometry();
+    void perspectiveCameraRangeUsesCompleteWorld();
+    void perspectiveTravelRangeCanonicalizesMalformedBounds();
+    void perspectiveWheelTargetsAreFiniteAndClamped();
+    void perspectiveOpenSpaceInvertsProjection();
+    void perspectiveProjectionAnchorsFocusDuringTravel();
     void perspectiveProjectionKeepsParentContextVisible();
     void perspectiveProjectionPreservesLaneOrdering();
     void perspectiveProjectionIsFiniteAndBounded();
@@ -224,6 +231,8 @@ void TreeLayoutEngineTest::activeThemeProfileIsComplete()
             >= theme.perspective.minimumHitOpacity);
     QVERIFY(theme.perspective.fogHintOpacity
             > theme.perspective.minimumHitOpacity);
+    QCOMPARE(theme.perspective.wheelTravelPerStep, qreal(0.5));
+    QVERIFY(theme.perspective.touchpadPixelsPerStep > 0.0);
     QVERIFY(theme.perspective.focusedTrunkNearWidth
             > theme.perspective.focusedTrunkFarWidth);
     QVERIFY(theme.perspective.directoryCorridorWidth
@@ -416,20 +425,299 @@ void TreeLayoutEngineTest::perspectiveTravelIsMonotonicAndReversible()
              initialChild->depthOpacity);
 }
 
-void TreeLayoutEngineTest::perspectiveProjectionCullsPassedGeometry()
+void TreeLayoutEngineTest::perspectiveCameraRangeUsesCompleteWorld()
 {
+    const PerspectiveTravelRange empty =
+        PerspectiveCameraPolicy::travelRange(perspectiveWorld(0));
+    QCOMPARE(empty.minimum, qreal(0.0));
+    QCOMPARE(empty.maximum, qreal(0.0));
+
+    WorldLayout malformed {.focusedId = 1};
+    malformed.nodes.append({
+        .id = 2,
+        .parentId = 1,
+        .role = WorldNodeRole::DirectChild,
+        .distanceAlongParent = -4.0
+    });
+    malformed.nodes.append({
+        .id = 3,
+        .parentId = 1,
+        .role = WorldNodeRole::DirectChild,
+        .distanceAlongParent =
+            std::numeric_limits<qreal>::infinity()
+    });
+    malformed.nodes.append({
+        .id = 5,
+        .parentId = 1,
+        .role = WorldNodeRole::DirectChild,
+        .distanceAlongParent =
+            std::numeric_limits<qreal>::quiet_NaN()
+    });
+    QCOMPARE(PerspectiveCameraPolicy::travelRange(malformed).maximum,
+             qreal(0.0));
+    malformed.nodes.append({
+        .id = 4,
+        .parentId = 1,
+        .role = WorldNodeRole::DirectChild,
+        .distanceAlongParent = 3.5
+    });
+    QCOMPARE(PerspectiveCameraPolicy::travelRange(malformed).maximum,
+             qreal(3.5));
+
+    const QVector<FileNode> nodes = perspectiveNodes(16);
+    const TreeLayoutEngine engine(ProjectionKind::Perspective);
+    const PerspectiveTravelRange complete =
+        engine.perspectiveTravelRange(nodes, 1);
+    QCOMPARE(complete.minimum, qreal(0.0));
+    QCOMPARE(complete.maximum, qreal(8.5));
+}
+
+void TreeLayoutEngineTest::perspectiveTravelRangeCanonicalizesMalformedBounds()
+{
+    struct RangeCase {
+        qreal minimum;
+        qreal maximum;
+        qreal safeMinimum;
+        qreal safeMaximum;
+        qreal ordinaryExpected;
+    };
+    const qreal nan = std::numeric_limits<qreal>::quiet_NaN();
+    const qreal infinity =
+        std::numeric_limits<qreal>::infinity();
+    const QVector<RangeCase> cases {
+        {-5.0, -2.0, 0.0, 0.0, 0.0},
+        {-5.0, 3.0, 0.0, 3.0, 1.0},
+        {5.0, 3.0, 5.0, 5.0, 5.0},
+        {nan, 3.0, 0.0, 3.0, 1.0},
+        {0.0, infinity, 0.0, 0.0, 0.0}
+    };
+
+    for (const RangeCase &test : cases) {
+        const PerspectiveTravelRange range {
+            .minimum = test.minimum,
+            .maximum = test.maximum
+        };
+        QCOMPARE(range.clamp(nan), test.safeMinimum);
+        QCOMPARE(range.clamp(-infinity), test.safeMinimum);
+        QCOMPARE(range.clamp(infinity), test.safeMaximum);
+        QCOMPARE(range.clamp(1.0), test.ordinaryExpected);
+        QVERIFY(range.clamp(1.0) >= 0.0);
+        QVERIFY(qIsFinite(range.clamp(infinity)));
+    }
+}
+
+void TreeLayoutEngineTest::perspectiveWheelTargetsAreFiniteAndClamped()
+{
+    const PerspectiveProfile &profile =
+        ThemeRegistry::active().perspective;
+    const PerspectiveTravelRange range {
+        .minimum = 0.0,
+        .maximum = 3.0
+    };
+    QCOMPARE(PerspectiveCameraPolicy::wheelTarget(
+                 1.0, 120.0, 0.0, range, profile),
+             qreal(1.5));
+    QCOMPARE(PerspectiveCameraPolicy::wheelTarget(
+                 1.0, -120.0, 0.0, range, profile),
+             qreal(0.5));
+    QCOMPARE(PerspectiveCameraPolicy::wheelTarget(
+                 1.0, 60.0, 0.0, range, profile),
+             qreal(1.25));
+    QCOMPARE(PerspectiveCameraPolicy::wheelTarget(
+                 1.0, 0.0, profile.touchpadPixelsPerStep,
+                 range, profile),
+             qreal(1.5));
+    QCOMPARE(PerspectiveCameraPolicy::wheelTarget(
+                 1.0, 120.0, -profile.touchpadPixelsPerStep,
+                 range, profile),
+             qreal(1.5));
+    QCOMPARE(PerspectiveCameraPolicy::wheelTarget(
+                 1.0, 0.0, 0.0, range, profile),
+             qreal(1.0));
+    QCOMPARE(PerspectiveCameraPolicy::wheelTarget(
+                 1.0, std::numeric_limits<qreal>::max(), 0.0,
+                 range, profile),
+             range.maximum);
+    QCOMPARE(PerspectiveCameraPolicy::wheelTarget(
+                 1.0, -std::numeric_limits<qreal>::max(), 0.0,
+                 range, profile),
+             range.minimum);
+    QCOMPARE(PerspectiveCameraPolicy::wheelTarget(
+                 1.0, std::numeric_limits<qreal>::infinity(),
+                 0.0, range, profile),
+             range.maximum);
+    QCOMPARE(PerspectiveCameraPolicy::wheelTarget(
+                 1.0, std::numeric_limits<qreal>::quiet_NaN(),
+                 profile.touchpadPixelsPerStep, range, profile),
+             qreal(1.5));
+    QCOMPARE(PerspectiveCameraPolicy::wheelTarget(
+                 1.0, 0.0,
+                 std::numeric_limits<qreal>::infinity(),
+                 range, profile),
+             range.maximum);
+    QCOMPARE(PerspectiveCameraPolicy::wheelTarget(
+                 1.0, 0.0,
+                 -std::numeric_limits<qreal>::infinity(),
+                 range, profile),
+             range.minimum);
+
+    PerspectiveProfile invalidProfile = profile;
+    invalidProfile.wheelTravelPerStep =
+        std::numeric_limits<qreal>::quiet_NaN();
+    QCOMPARE(PerspectiveCameraPolicy::wheelTarget(
+                 1.0, 120.0, 0.0, range, invalidProfile),
+             qreal(1.0));
+
+    const PerspectiveTravelRange malformedRange {
+        .minimum = std::numeric_limits<qreal>::quiet_NaN(),
+        .maximum = std::numeric_limits<qreal>::infinity()
+    };
+    const qreal malformedTarget =
+        PerspectiveCameraPolicy::wheelTarget(
+            std::numeric_limits<qreal>::quiet_NaN(),
+            std::numeric_limits<qreal>::quiet_NaN(),
+            std::numeric_limits<qreal>::infinity(),
+            malformedRange, profile);
+    QVERIFY(qIsFinite(malformedTarget));
+}
+
+void TreeLayoutEngineTest::perspectiveOpenSpaceInvertsProjection()
+{
+    const PerspectiveProfile &profile =
+        ThemeRegistry::active().perspective;
+    const PerspectiveTravelRange range {
+        .minimum = 0.0,
+        .maximum = 8.5
+    };
+    const QSizeF viewport(1000.0, 800.0);
+    const qreal horizonY =
+        viewport.height() * profile.horizonYRatio;
+    const qreal nearY = viewport.height() * profile.nearYRatio;
+    const qreal desiredTarget = 3.0;
+    const qreal currentDepth = 1.0;
+    const qreal cameraDepth = profile.cameraClearance
+        + desiredTarget - currentDepth;
+    const qreal scale = profile.focalDepth
+        / (profile.focalDepth + cameraDepth);
+    const qreal projectedY = horizonY
+        + (nearY - horizonY) * scale;
+
+    QVERIFY(approximately(
+        PerspectiveCameraPolicy::openSpaceTarget(
+            currentDepth, projectedY, viewport, range, profile),
+        desiredTarget));
+    QCOMPARE(PerspectiveCameraPolicy::openSpaceTarget(
+                 currentDepth, horizonY, viewport, range, profile),
+             range.maximum);
+    QCOMPARE(PerspectiveCameraPolicy::openSpaceTarget(
+                 currentDepth, nearY, viewport, range, profile),
+             range.minimum);
+    QCOMPARE(PerspectiveCameraPolicy::openSpaceTarget(
+                 currentDepth, projectedY, {1000.0, 0.0},
+                 range, profile),
+             currentDepth);
+
+    PerspectiveProfile degenerate = profile;
+    degenerate.nearYRatio = degenerate.horizonYRatio;
+    QCOMPARE(PerspectiveCameraPolicy::openSpaceTarget(
+                 currentDepth, projectedY, viewport,
+                 range, degenerate),
+             currentDepth);
+
+    PerspectiveProfile tinySpan = profile;
+    tinySpan.nearYRatio = std::nextafter(
+        tinySpan.horizonYRatio,
+        std::numeric_limits<qreal>::infinity());
+    const qreal tinySpanTarget =
+        PerspectiveCameraPolicy::openSpaceTarget(
+            currentDepth,
+            std::numeric_limits<qreal>::max(),
+            viewport, range, tinySpan);
+    QCOMPARE(tinySpanTarget, range.minimum);
+    QVERIFY(qIsFinite(tinySpanTarget));
+
+    for (const qreal invalidClearance : {
+             0.0,
+             -1.0,
+             std::numeric_limits<qreal>::infinity(),
+             std::numeric_limits<qreal>::quiet_NaN()}) {
+        PerspectiveProfile invalid = profile;
+        invalid.cameraClearance = invalidClearance;
+        QCOMPARE(PerspectiveCameraPolicy::openSpaceTarget(
+                     currentDepth, projectedY, viewport,
+                     range, invalid),
+                 currentDepth);
+    }
+    QVERIFY(qIsFinite(PerspectiveCameraPolicy::openSpaceTarget(
+        std::numeric_limits<qreal>::quiet_NaN(),
+        std::numeric_limits<qreal>::quiet_NaN(),
+        viewport, range, profile)));
+    const PerspectiveTravelRange malformedRange {
+        .minimum = std::numeric_limits<qreal>::quiet_NaN(),
+        .maximum = std::numeric_limits<qreal>::infinity()
+    };
+    QVERIFY(qIsFinite(PerspectiveCameraPolicy::openSpaceTarget(
+        currentDepth, horizonY, viewport, malformedRange, profile)));
+}
+
+void TreeLayoutEngineTest::perspectiveProjectionAnchorsFocusDuringTravel()
+{
+    constexpr NodeId parentId = 100;
+    PerspectiveHierarchy fixture = perspectiveHierarchy(16, 0);
+    fixture.nodes.first().parentId = parentId;
+    fixture.nodes.append({
+        .id = parentId,
+        .parentId = InvalidNodeId,
+        .name = QStringLiteral("Parent context"),
+        .path = QStringLiteral("/parent"),
+        .kind = NodeKind::Directory
+    });
+    fixture.world.nodes.first().parentId = parentId;
+    fixture.world.nodes.prepend({
+        .id = parentId,
+        .role = WorldNodeRole::ParentContext,
+        .semanticDepth = -1,
+        .distanceAlongParent = -1.0
+    });
+    const PerspectiveTravelRange range =
+        PerspectiveCameraPolicy::travelRange(fixture.world);
     const PerspectiveProjection projection;
-    const QVector<FileNode> nodes = perspectiveNodes(1);
-    const WorldLayout world = perspectiveWorld(1);
+    const QVector<ProjectedNode> initial = projection.project(
+        fixture.world, fixture.nodes, perspectiveView(range.minimum));
+    const ProjectedNode *initialParent =
+        projectedNode(initial, parentId);
+    const ProjectedNode *initialFocus = projectedNode(initial, 1);
+    QVERIFY(initialParent);
+    QVERIFY(initialFocus);
 
-    const QVector<ProjectedNode> pastFocus = projection.project(
-        world, nodes, perspectiveView(1.1));
-    QVERIFY(!projectedNode(pastFocus, 1));
-    QVERIFY(projectedNode(pastFocus, 2));
+    for (const qreal travelDepth : {
+             range.minimum,
+             range.maximum * 0.5,
+             range.maximum}) {
+        const QVector<ProjectedNode> projected = projection.project(
+            fixture.world, fixture.nodes,
+            perspectiveView(travelDepth));
+        const ProjectedNode *parent =
+            projectedNode(projected, parentId);
+        const ProjectedNode *focus = projectedNode(projected, 1);
+        QVERIFY(parent);
+        QVERIFY(focus);
+        QCOMPARE(parent->position, initialParent->position);
+        QCOMPARE(parent->branchSurface,
+                 initialParent->branchSurface);
+        QCOMPARE(focus->position, initialFocus->position);
+        QCOMPARE(focus->branchSurface,
+                 initialFocus->branchSurface);
+    }
 
-    const QVector<ProjectedNode> pastEverything = projection.project(
-        world, nodes, perspectiveView(2.1));
-    QVERIFY(pastEverything.isEmpty());
+    const QVector<ProjectedNode> emptyWindow = projection.project(
+        fixture.world, fixture.nodes,
+        perspectiveView(range.maximum
+                        + ThemeRegistry::active()
+                            .perspective.cameraClearance + 1.0));
+    QCOMPARE(emptyWindow.size(), qsizetype(2));
+    QVERIFY(projectedNode(emptyWindow, parentId));
+    QVERIFY(projectedNode(emptyWindow, 1));
 }
 
 void TreeLayoutEngineTest::perspectiveProjectionKeepsParentContextVisible()
@@ -524,7 +812,8 @@ void TreeLayoutEngineTest::perspectiveProjectionIsFiniteAndBounded()
     }
     const QVector<ProjectedNode> farPast = projection.project(
         world, nodes, perspectiveView(1'000'000.0));
-    QVERIFY(farPast.isEmpty());
+    QCOMPARE(farPast.size(), qsizetype(1));
+    QVERIFY(projectedNode(farPast, 1));
 }
 
 void TreeLayoutEngineTest::perspectiveBudgetHasExactEdges()

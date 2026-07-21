@@ -1,6 +1,7 @@
 #pragma once
 
 #include "PlanarProjection.h"
+#include "PerspectiveCameraPolicy.h"
 #include "PerspectiveProjection.h"
 #include "ProjectedNode.h"
 #include "ThemeProfile.h"
@@ -24,6 +25,10 @@ public:
         const ViewState &view = {}) const;
 
     [[nodiscard]] ProjectionKind projectionKind() const;
+
+    [[nodiscard]] PerspectiveTravelRange perspectiveTravelRange(
+        const QVector<FileNode> &nodes,
+        NodeId focusedId) const;
 
 private:
     WorldLayoutEngine m_worldLayoutEngine;

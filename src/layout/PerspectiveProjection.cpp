@@ -195,7 +195,13 @@ QVector<ProjectedNode> PerspectiveProjection::project(
         }
         worldPoints.insert(placement.id, point);
 
-        const ScreenPoint projected = projectPoint(point, view, profile);
+        ViewState projectionView = view;
+        if (placement.role == WorldNodeRole::ParentContext
+            || placement.role == WorldNodeRole::Focus) {
+            projectionView.travelDepth = 0.0;
+        }
+        const ScreenPoint projected = projectPoint(
+            point, projectionView, profile);
         if (!projected.visible)
             continue;
         const qreal radius = radiusFor(
