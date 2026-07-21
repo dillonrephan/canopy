@@ -124,6 +124,11 @@ an isolated end-to-end input sweep remains:
   prove that forward travel changes painted output, reversal restores it
   bit-for-bit, focus resets to depth zero, and reduced motion reaches the same
   final frame as an immediate snap.
+- An offscreen full-window test loads the production QML, clicks the visible
+  backward, forward, and reset controls, and verifies that the declared Page
+  Up, Page Down, and Ctrl+0 shortcut handlers drive the real scene controller.
+  It does not claim physical keyboard, wheel, or touchpad delivery through a
+  compositor.
 - Stage 9 validation also locks exact live-scan deltas and the planar
   reduced-motion camera notification. Unchanged scan survivors are no longer
   reported as new arrivals at reconciliation.
@@ -132,8 +137,10 @@ Remaining Stage 9 validation:
 
 - Complete an isolated interactive sweep of wheel/touchpad, Page Up/Down,
   visible controls, reset, open-space travel, and focus/backtracking. The
-  startup frame is inspected; compositor-level synthetic key delivery was
-  inconclusive and is not counted as passing evidence.
+  startup frame and QML control/shortcut-handler wiring are automated;
+  compositor-level keyboard delivery, real wheel/touchpad input, and the
+  complete interaction sequence still require hands-on evidence. Synthetic
+  key delivery was inconclusive and is not counted as passing evidence.
 - Decide how projected surfaces interpolate during focus/live transitions;
   preserve the current atomic geometry fallback until paint and hit can derive
   from one interpolated path.
