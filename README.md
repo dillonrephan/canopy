@@ -71,6 +71,10 @@ Development uses a Fedora Toolbx named `canopy-dev` so Qt and compiler packages
 remain isolated from the host workstation. The source tree stays on the host and
 is automatically visible inside Toolbx.
 
+When returning after a break, start with the project
+[`CHECKLIST.md`](CHECKLIST.md) to verify Git state, environment health, the
+active architectural checkpoint, and the next bounded task.
+
 Create or update the container, build the project, and run its tests:
 
 ```bash
