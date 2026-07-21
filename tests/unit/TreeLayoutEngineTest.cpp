@@ -98,6 +98,8 @@ private slots:
     void perspectiveProjectionCullsPassedGeometry();
     void perspectiveProjectionPreservesLaneOrdering();
     void perspectiveProjectionIsFiniteAndBounded();
+    void perspectiveProjectionBuildsTaperedSurfaces();
+    void perspectiveHitGeometryContainsPaintedSurfaces();
     void layoutIsDeterministic();
     void focusedDirectoryKeepsParentContext();
     void wideDirectoryUsesUniquePositions();
@@ -156,6 +158,11 @@ void TreeLayoutEngineTest::activeThemeProfileIsComplete()
     QVERIFY(theme.perspective.fogStartDepth
             < theme.perspective.fogEndDepth);
     QVERIFY(theme.perspective.minimumCameraDepth > 0.0);
+    QVERIFY(theme.perspective.focusedTrunkNearWidth
+            > theme.perspective.focusedTrunkFarWidth);
+    QVERIFY(theme.perspective.directoryCorridorWidth
+            > theme.perspective.fileCorridorWidth);
+    QVERIFY(theme.perspective.hitPadding > 0.0);
 }
 
 void TreeLayoutEngineTest::worldPlacementMatchesPlanarLanes()
@@ -395,6 +402,58 @@ void TreeLayoutEngineTest::perspectiveProjectionIsFiniteAndBounded()
     const QVector<ProjectedNode> farPast = projection.project(
         world, nodes, perspectiveView(1'000'000.0));
     QVERIFY(farPast.isEmpty());
+}
+
+void TreeLayoutEngineTest::perspectiveProjectionBuildsTaperedSurfaces()
+{
+    const PerspectiveProjection projection;
+    const QVector<FileNode> nodes = perspectiveNodes(1);
+    const QVector<ProjectedNode> projected = projection.project(
+        perspectiveWorld(1), nodes, perspectiveView());
+    const ProjectedNode *focus = projectedNode(projected, 1);
+    const ProjectedNode *child = projectedNode(projected, 2);
+    QVERIFY(focus);
+    QVERIFY(child);
+
+    QVERIFY(!focus->branchSurface.isEmpty());
+    QVERIFY(!child->branchSurface.isEmpty());
+    QVERIFY(focus->branchStartWidth > focus->branchEndWidth);
+    QVERIFY(child->branchStartWidth > child->branchEndWidth);
+    QVERIFY(approximately(focus->branchStartWidth, 130.0));
+    QVERIFY(approximately(focus->branchEndWidth, 68.3333));
+    QVERIFY(approximately(child->branchStartWidth, 75.0));
+    QVERIFY(approximately(child->branchEndWidth, 30.8571));
+    QVERIFY(focus->branchStartWidth > child->branchStartWidth);
+}
+
+void TreeLayoutEngineTest::perspectiveHitGeometryContainsPaintedSurfaces()
+{
+    const PerspectiveProjection projection;
+    const QVector<FileNode> nodes = perspectiveNodes(8);
+    const QVector<ProjectedNode> projected = projection.project(
+        perspectiveWorld(8), nodes, perspectiveView());
+
+    for (const ProjectedNode &node : projected) {
+        QVERIFY2(!node.branchSurface.isEmpty(),
+                 "Every projected node needs painted surface geometry");
+        QVERIFY2(!node.hitArea.isEmpty(),
+                 "Every painted surface needs matching hit geometry");
+        QVERIFY2(node.branchSurface.subtracted(node.hitArea).isEmpty(),
+                 "Hit geometry must contain the complete painted surface");
+        QVERIFY(node.hitArea.boundingRect().contains(
+            node.branchSurface.boundingRect()));
+
+        QPainterPath centerLine(node.branchStart);
+        centerLine.cubicTo(
+            node.branchControl1,
+            node.branchControl2,
+            node.position);
+        const QPointF midpoint = centerLine.pointAtPercent(0.5);
+        QVERIFY(node.branchSurface.contains(midpoint));
+        QVERIFY(node.hitArea.contains(midpoint));
+        QVERIFY(!node.hitArea.contains(
+            midpoint + QPointF(500.0, 500.0)));
+    }
 }
 
 void TreeLayoutEngineTest::layoutIsDeterministic()

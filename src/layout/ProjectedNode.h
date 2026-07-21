@@ -2,6 +2,7 @@
 
 #include "FileNode.h"
 
+#include <QPainterPath>
 #include <QPointF>
 #include <QRectF>
 #include <QtTypes>
@@ -16,6 +17,10 @@ struct ProjectedNode {
     QPointF branchStart;
     QPointF branchControl1;
     QPointF branchControl2;
+    QPainterPath branchSurface;
+    QPainterPath hitArea;
+    qreal branchStartWidth = 0.0;
+    qreal branchEndWidth = 0.0;
     QPointF crownEnd;
     quint64 hiddenChildCount = 0;
     int corridorSlot = -1;

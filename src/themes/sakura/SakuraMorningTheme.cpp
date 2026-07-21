@@ -97,6 +97,12 @@ const ThemeProfile &SakuraMorningTheme::profile()
             .fogEndDepth = 9.0,
             .minimumFogOpacity = 0.25,
             .fogHintOpacity = 0.48,
+            .focusedTrunkNearWidth = 130.0,
+            .focusedTrunkFarWidth = 82.0,
+            .directoryCorridorWidth = 90.0,
+            .fileCorridorWidth = 30.0,
+            .corridorTipRatio = 0.48,
+            .hitPadding = 10.0,
             .foregroundCorridorCount = 6,
             .fogHintCount = 2
         },

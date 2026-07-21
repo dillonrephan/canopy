@@ -103,6 +103,12 @@ struct PerspectiveProfile {
     qreal fogEndDepth = 9.0;
     qreal minimumFogOpacity = 0.25;
     qreal fogHintOpacity = 0.48;
+    qreal focusedTrunkNearWidth = 130.0;
+    qreal focusedTrunkFarWidth = 82.0;
+    qreal directoryCorridorWidth = 90.0;
+    qreal fileCorridorWidth = 30.0;
+    qreal corridorTipRatio = 0.48;
+    qreal hitPadding = 10.0;
     int foregroundCorridorCount = 6;
     int fogHintCount = 2;
 };
