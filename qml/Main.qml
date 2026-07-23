@@ -7,6 +7,7 @@ import Canopy
 
 ApplicationWindow {
     id: window
+    objectName: "canopyWindow"
     property string initialPath: ""
     width: 1280
     height: 800
@@ -48,6 +49,7 @@ ApplicationWindow {
 
             ToolButton {
                 id: backButton
+                objectName: "backButton"
                 text: "←"
                 enabled: tree.canGoBack
                 Accessible.name: "Back"
@@ -77,6 +79,7 @@ ApplicationWindow {
 
             ToolButton {
                 id: upButton
+                objectName: "upButton"
                 text: "↑"
                 enabled: tree.canGoUp
                 Accessible.name: "Parent directory"
@@ -106,6 +109,7 @@ ApplicationWindow {
 
             TextField {
                 id: addressField
+                objectName: "addressField"
                 Layout.fillWidth: true
                 text: tree.breadcrumb
                 selectByMouse: true
@@ -140,6 +144,7 @@ ApplicationWindow {
 
             ToolButton {
                 id: travelBackButton
+                objectName: "travelBackButton"
                 text: "−"
                 visible: tree.perspectiveProjection
                 enabled: tree.canTravelBackward
@@ -172,6 +177,7 @@ ApplicationWindow {
 
             ToolButton {
                 id: travelForwardButton
+                objectName: "travelForwardButton"
                 text: "+"
                 visible: tree.perspectiveProjection
                 enabled: tree.canTravelForward
@@ -194,6 +200,7 @@ ApplicationWindow {
 
             Button {
                 id: resetButton
+                objectName: "resetButton"
                 text: "Reset view"
                 enabled: !tree.perspectiveProjection || tree.canResetView
                 Accessible.name: "Reset view"
@@ -232,6 +239,7 @@ ApplicationWindow {
 
             TreeScene {
                 id: tree
+                objectName: "treeScene"
                 anchors.fill: parent
                 focus: true
                 reducedMotion: reducedMotion.checked
@@ -662,6 +670,7 @@ ApplicationWindow {
 
                 CheckBox {
                     id: reducedMotion
+                    objectName: "reducedMotionCheckBox"
                     text: "Reduced motion"
                     checked: false
 
@@ -737,6 +746,7 @@ ApplicationWindow {
     }
 
     Shortcut {
+        objectName: "pageDownShortcut"
         sequence: "PageDown"
         enabled: tree.activeFocus
                  && tree.perspectiveProjection
@@ -745,6 +755,7 @@ ApplicationWindow {
     }
 
     Shortcut {
+        objectName: "pageUpShortcut"
         sequence: "PageUp"
         enabled: tree.activeFocus
                  && tree.perspectiveProjection
@@ -753,6 +764,7 @@ ApplicationWindow {
     }
 
     Shortcut {
+        objectName: "resetShortcut"
         sequence: "Ctrl+0"
         enabled: !tree.perspectiveProjection || tree.canResetView
         onActivated: tree.resetView()

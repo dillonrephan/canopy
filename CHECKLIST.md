@@ -108,8 +108,8 @@ Stage 7 is complete:
 - The inspected 29-entry frame stayed bounded and reported `+21 more in
   Contents`, exactly 29 known entries minus eight projected direct children.
 
-Stage 8 is complete in code with deterministic offscreen renderer and direct
-Qt event validation; offscreen QML wiring and physical-input sweeps remain:
+Stage 8 is complete in code with deterministic offscreen renderer, direct Qt
+event validation, and real-QML wiring coverage; a physical-input sweep remains:
 
 - Travel range is recomputed from complete stable world layout on focus, live
   changes, and resize; current and pending depths clamp deterministically.
@@ -131,18 +131,21 @@ Qt event validation; offscreen QML wiring and physical-input sweeps remain:
   accumulation across partial pixel-delta `ScrollUpdate` events, reversal from
   the rendered depth, bounded no-ops, open-space double-click, reset, and
   focus/up/back travel resets without a display or personal filesystem.
+- The real embedded `Main.qml` also loads without warnings under the offscreen
+  software backend against a synthetic home. Direct Shortcut activation covers
+  Page Up/Down and Ctrl+0 bindings and active-focus enablement, while mouse
+  events cover the visible travel/reset/up/back controls and their state.
 - Stage 9 validation also locks exact live-scan deltas and the planar
   reduced-motion camera notification. Unchanged scan survivors are no longer
   reported as new arrivals at reconciliation.
 
 Remaining Stage 9 validation:
 
-- Add an offscreen QML integration test for Page Up/Down, visible travel/reset
-  controls, Ctrl+0, and active-focus gating; the C++ handlers beneath those
-  bindings already have direct synthetic event coverage.
 - Reserve the future VM sweep for compositor and physical-input evidence:
-  KWin/Wayland focus delivery, wheel direction/inversion/phase, touchpad event
-  coalescing, compositor double-click timing, scaling, and perceived motion.
+  KWin/Wayland key delivery to enabled Shortcuts, focus delivery, wheel
+  direction/inversion/phase, touchpad event coalescing, compositor double-click
+  timing, scaling, and perceived motion. Offscreen QTest key delivery remains
+  inconclusive and is not counted as Shortcut-delivery evidence.
 - Projected-surface interpolation is covered by pure geometry invariants and a
   deterministic offscreen focus-transition paint/hit test. Mid-transition
   refocus resumes from the exact visible surface; keep checking simultaneous
