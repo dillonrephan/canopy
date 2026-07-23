@@ -748,7 +748,7 @@ ApplicationWindow {
     Shortcut {
         objectName: "pageDownShortcut"
         sequence: "PageDown"
-        enabled: tree.activeFocus
+        enabled: !addressField.activeFocus
                  && tree.perspectiveProjection
                  && tree.canTravelForward
         onActivated: tree.travelForward()
@@ -757,7 +757,7 @@ ApplicationWindow {
     Shortcut {
         objectName: "pageUpShortcut"
         sequence: "PageUp"
-        enabled: tree.activeFocus
+        enabled: !addressField.activeFocus
                  && tree.perspectiveProjection
                  && tree.canTravelBackward
         onActivated: tree.travelBackward()

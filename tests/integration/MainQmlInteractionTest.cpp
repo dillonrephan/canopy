@@ -157,6 +157,12 @@ void MainQmlInteractionTest::shortcutsAndVisibleControlsDriveTravel()
     QVERIFY(pageDownShortcut);
     QVERIFY(pageUpShortcut);
     QVERIFY(resetShortcut);
+    QCOMPARE(pageDownShortcut->property("sequence").toString(),
+             QStringLiteral("PageDown"));
+    QCOMPARE(pageUpShortcut->property("sequence").toString(),
+             QStringLiteral("PageUp"));
+    QCOMPARE(resetShortcut->property("sequence").toString(),
+             QStringLiteral("Ctrl+0"));
 
     QTRY_COMPARE(tree->property("breadcrumb").toString(),
                  fixture.directory.path());
@@ -181,6 +187,16 @@ void MainQmlInteractionTest::shortcutsAndVisibleControlsDriveTravel()
     address->forceActiveFocus();
     QTRY_VERIFY(address->hasActiveFocus());
     QVERIFY(!pageDownShortcut->property("enabled").toBool());
+    QCOMPARE(realProperty(tree, "travelDepth"), qreal(0.0));
+
+    reducedMotion->forceActiveFocus();
+    QTRY_VERIFY(reducedMotion->hasActiveFocus());
+    QVERIFY(!tree->hasActiveFocus());
+    QTRY_VERIFY(pageDownShortcut->property("enabled").toBool());
+    QVERIFY(QMetaObject::invokeMethod(pageDownShortcut, "activated"));
+    QCOMPARE(realProperty(tree, "travelDepth"), qreal(0.5));
+    QTRY_VERIFY(pageUpShortcut->property("enabled").toBool());
+    QVERIFY(QMetaObject::invokeMethod(pageUpShortcut, "activated"));
     QCOMPARE(realProperty(tree, "travelDepth"), qreal(0.0));
 
     QTRY_VERIFY(travelForward->property("enabled").toBool());

@@ -58,8 +58,9 @@ check `avahi-daemon.socket`; the existing Toolbx binds that host socket.
   incomplete-directory state without changing the core/planar 16-entry policy.
   The focus badge subtracts projected direct children from the greater of known
   total and materialized direct-child count.
-- The full build, QML lint, and test suite passed, and the final isolated frame
-  was inspected at `/tmp/canopy-stage7-budget-final-verified.png`.
+- The full build, QML lint, and four test executables pass on the perspective
+  branch. A separate detached planar rollback worktree also passed and retained
+  its bounded 16-entry presentation against the crowded fixture.
 
 ## Active task: validate perspective camera travel
 
@@ -109,7 +110,8 @@ Stage 7 is complete:
   Contents`, exactly 29 known entries minus eight projected direct children.
 
 Stage 8 is complete in code with deterministic offscreen renderer, direct Qt
-event validation, and real-QML wiring coverage; a physical-input sweep remains:
+event validation, real-QML wiring coverage, and a partial Fedora Plasma
+compositor sweep; physical-input and accessibility checks remain:
 
 - Travel range is recomputed from complete stable world layout on focus, live
   changes, and resize; current and pending depths clamp deterministically.
@@ -133,8 +135,19 @@ event validation, and real-QML wiring coverage; a physical-input sweep remains:
   focus/up/back travel resets without a display or personal filesystem.
 - The real embedded `Main.qml` also loads without warnings under the offscreen
   software backend against a synthetic home. Direct Shortcut activation covers
-  Page Up/Down and Ctrl+0 bindings and active-focus enablement, while mouse
-  events cover the visible travel/reset/up/back controls and their state.
+  Page Up/Down and Ctrl+0 bindings plus address-edit gating, while mouse events
+  cover the visible travel/reset/up/back controls and their state.
+- A separate Fedora guest-native Toolbx build passed its full configure, build,
+  QML lint, and test loop. On the real Plasma session, pointer activation of the
+  forward and reset controls changed and reset depth, reduced motion snapped to
+  the same bounded half-step, Ctrl+L focused and selected the path field, and a
+  35-entry directory remained bounded at eight projected entries.
+- Live creation and removal changed the same running view from 35 to 36 and
+  back to 35 entries, with overflow changing from `+27` to `+28` and back.
+- The compositor sweep exposed a real focus defect: Page Up/Down shortcuts were
+  disabled whenever the tree did not own active focus. They are now enabled
+  outside path editing and covered by the synthetic-home production-QML test;
+  editing the path still suppresses travel shortcuts.
 - Stage 9 validation also locks exact live-scan deltas and the planar
   reduced-motion camera notification. Unchanged scan survivors are no longer
   reported as new arrivals at reconciliation.
@@ -142,10 +155,11 @@ event validation, and real-QML wiring coverage; a physical-input sweep remains:
 Remaining Stage 9 validation:
 
 - Reserve the future VM sweep for compositor and physical-input evidence:
-  KWin/Wayland key delivery to enabled Shortcuts, focus delivery, wheel
-  direction/inversion/phase, touchpad event coalescing, compositor double-click
-  timing, scaling, and perceived motion. Offscreen QTest key delivery remains
-  inconclusive and is not counted as Shortcut-delivery evidence.
+  KWin/Wayland key and focus delivery, a real wheel/touchpad, open-space
+  double-click travel, branch focus/backtracking, visible keyboard focus,
+  assistive-technology exposure, scaling, and perceived motion. Offscreen QTest
+  key delivery and prior QMP Page Down, wheel, double-click, and Tab delivery
+  remain inconclusive and are not counted as compositor evidence.
 - Projected-surface interpolation is covered by pure geometry invariants and a
   deterministic offscreen focus-transition paint/hit test. Mid-transition
   refocus resumes from the exact visible surface; keep checking simultaneous
