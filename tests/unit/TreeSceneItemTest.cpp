@@ -4,12 +4,14 @@
 #include <QDir>
 #include <QFile>
 #include <QImage>
+#include <QLineF>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QtTest>
 
+#include <algorithm>
 
 class TreeSceneItemTest final : public QObject
 {
@@ -21,7 +23,7 @@ private slots:
     void liveRemovalClampsRangeAndDepth();
     void emptyDirectoryTravelIsSignalFree();
     void offscreenPaintTracksTravelAndResetState();
-    void perspectiveFocusTransitionPaintsIntermediateSurface();
+    void perspectiveFocusTransitionSharesPaintAndHitGeometry();
     void planarReducedMotionSnapsCameraWithOneSignal();
     void removedDepartureSnapshotPaintsWithoutHitTarget();
     void removedHistoryEntryIsReconciledBeforeNavigationSignal();
@@ -289,7 +291,7 @@ void TreeSceneItemTest::offscreenPaintTracksTravelAndResetState()
     QCOMPARE(renderScene(scene), directReducedMotionSnap);
 }
 
-void TreeSceneItemTest::perspectiveFocusTransitionPaintsIntermediateSurface()
+void TreeSceneItemTest::perspectiveFocusTransitionSharesPaintAndHitGeometry()
 {
     QTemporaryDir temporaryDirectory;
     QVERIFY(temporaryDirectory.isValid());
@@ -305,17 +307,109 @@ void TreeSceneItemTest::perspectiveFocusTransitionPaintsIntermediateSurface()
     QTRY_COMPARE_WITH_TIMEOUT(
         scene.selectedMaterializedChildCount(), qulonglong(2), 5000);
 
-    QVERIFY(scene.navigateToPath(branch.path()));
-    const QImage start = renderScene(scene);
-    const int duration = ThemeRegistry::active().motion.focusDuration;
-    QTest::qWait(qMax(1, duration / 2));
-    const QImage middle = renderScene(scene);
-    QTest::qWait(duration + 50);
-    const QImage finish = renderScene(scene);
+    const auto branchNode = std::find_if(
+        scene.m_filesystemModel.nodes().cbegin(),
+        scene.m_filesystemModel.nodes().cend(),
+        [&branch](const FileNode &node) {
+            return node.path == branch.path();
+        });
+    QVERIFY(branchNode != scene.m_filesystemModel.nodes().cend());
+    const NodeId branchId = branchNode->id;
 
-    QVERIFY(changedPixelCount(start, finish) > 1000);
-    QVERIFY(changedPixelCount(start, middle) > 100);
-    QVERIFY(changedPixelCount(middle, finish) > 100);
+    QVERIFY(scene.navigateToPath(branch.path()));
+    const int duration = ThemeRegistry::active().motion.focusDuration;
+    QVERIFY(duration > 1);
+    scene.m_focusAnimation.setCurrentTime(0);
+    QVERIFY(scene.m_previousProjectedLayout.contains(branchId));
+
+    const LayoutNode initial =
+        scene.m_previousProjectedLayout.value(branchId);
+    const auto finalIt = std::find_if(
+        scene.m_layout.cbegin(), scene.m_layout.cend(),
+        [branchId](const LayoutNode &layout) {
+            return layout.id == branchId;
+        });
+    QVERIFY(finalIt != scene.m_layout.cend());
+    const LayoutNode final = *finalIt;
+
+    scene.m_focusAnimation.setCurrentTime(duration / 2);
+    const QVector<LayoutNode> middleLayout =
+        scene.resolvedPerspectiveLayout();
+    const auto middleIt = std::find_if(
+        middleLayout.cbegin(), middleLayout.cend(),
+        [branchId](const LayoutNode &layout) {
+            return layout.id == branchId;
+        });
+    QVERIFY(middleIt != middleLayout.cend());
+    const LayoutNode middle = *middleIt;
+    QVERIFY(middle.position != initial.position);
+    QVERIFY(middle.position != final.position);
+
+    QPoint hitPixel(-1, -1);
+    const QRect searchBounds = middle.branchSurface.boundingRect()
+        .intersected(scene.boundingRect()).toAlignedRect();
+    for (int y = searchBounds.top();
+         y <= searchBounds.bottom() && hitPixel.x() < 0; ++y) {
+        for (int x = searchBounds.left(); x <= searchBounds.right(); ++x) {
+            const QPointF point(x + 0.5, y + 0.5);
+            if (!middle.branchSurface.contains(point)
+                || initial.hitArea.contains(point)
+                || final.hitArea.contains(point)
+                || middle.labelBounds.contains(point)
+                || QLineF(point, middle.position).length()
+                    <= middle.radius + 9.0
+                || scene.nodeAt(point) != branchId) {
+                continue;
+            }
+            hitPixel = {x, y};
+            break;
+        }
+    }
+    QVERIFY2(hitPixel.x() >= 0,
+             "No branch-only midpoint unique to interpolated geometry");
+    const QPointF hitPoint(hitPixel.x() + 0.5, hitPixel.y() + 0.5);
+    QVERIFY(middle.hitArea.contains(hitPoint));
+    QVERIFY(!initial.hitArea.contains(hitPoint));
+    QVERIFY(!final.hitArea.contains(hitPoint));
+    QCOMPARE(scene.nodeAt(hitPoint), branchId);
+
+    const QImage middleFrame = renderScene(scene);
+    QVERIFY(middleFrame.pixelColor(hitPixel)
+            != ThemeRegistry::active().palette.sceneCanvas);
+
+    scene.m_focusAnimation.setCurrentTime(0);
+    QVERIFY(scene.nodeAt(hitPoint) != branchId);
+    scene.m_focusAnimation.setCurrentTime(duration / 2);
+    const QVector<LayoutNode> beforeInterruption =
+        scene.resolvedPerspectiveLayout();
+    const auto visibleIt = std::find_if(
+        beforeInterruption.cbegin(), beforeInterruption.cend(),
+        [branchId](const LayoutNode &layout) {
+            return layout.id == branchId;
+        });
+    QVERIFY(visibleIt != beforeInterruption.cend());
+    const LayoutNode visibleBeforeInterruption = *visibleIt;
+
+    QVERIFY(scene.navigateToPath(root.path()));
+    scene.m_focusAnimation.setCurrentTime(0);
+    QVERIFY(scene.m_previousProjectedLayout.contains(branchId));
+    QCOMPARE(scene.m_previousProjectedLayout.value(branchId).position,
+             visibleBeforeInterruption.position);
+    QCOMPARE(scene.m_previousProjectedLayout.value(branchId).branchSurface,
+             visibleBeforeInterruption.branchSurface);
+    const QVector<LayoutNode> interruptedStart =
+        scene.resolvedPerspectiveLayout();
+    const auto interruptedIt = std::find_if(
+        interruptedStart.cbegin(), interruptedStart.cend(),
+        [branchId](const LayoutNode &layout) {
+            return layout.id == branchId;
+        });
+    QVERIFY(interruptedIt != interruptedStart.cend());
+    QCOMPARE(interruptedIt->branchSurface,
+             visibleBeforeInterruption.branchSurface);
+
+    scene.m_focusAnimation.setCurrentTime(duration);
+    QVERIFY(scene.nodeAt(hitPoint) != branchId);
 }
 
 void TreeSceneItemTest::planarReducedMotionSnapsCameraWithOneSignal()

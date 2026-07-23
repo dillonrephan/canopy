@@ -16,6 +16,7 @@ class QMouseEvent;
 class QPainter;
 class QPainterPath;
 class QWheelEvent;
+class TreeSceneItemTest;
 
 class TreeSceneItem : public QQuickPaintedItem
 {
@@ -124,6 +125,8 @@ protected:
     void wheelEvent(QWheelEvent *event) override;
 
 private:
+    friend class TreeSceneItemTest;
+
     struct DepartureSnapshot {
         LayoutNode layout;
         NodeKind kind = NodeKind::Directory;
