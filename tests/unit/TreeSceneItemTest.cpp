@@ -9,6 +9,7 @@
 #include <QPainter>
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QWheelEvent>
 #include <QtTest>
 
 #include <algorithm>
@@ -19,6 +20,8 @@ class TreeSceneItemTest final : public QObject
 
 private slots:
     void reducedMotionTravelSnapsWithOneSignal();
+    void perspectiveWheelEventsDriveBoundedTravel();
+    void perspectiveBlankDoubleClickAndReset();
     void focusAndUpResetTravelWithOneSignal();
     void liveRemovalClampsRangeAndDepth();
     void emptyDirectoryTravelIsSignalFree();
@@ -35,7 +38,7 @@ class EventTreeSceneItem final : public TreeSceneItem
 public:
     using TreeSceneItem::TreeSceneItem;
 
-    void doubleClickBlank(const QPointF &position)
+    bool doubleClickBlank(const QPointF &position)
     {
         QMouseEvent event(
             QEvent::MouseButtonDblClick,
@@ -45,7 +48,29 @@ public:
             Qt::LeftButton,
             Qt::LeftButton,
             Qt::NoModifier);
+        event.ignore();
         mouseDoubleClickEvent(&event);
+        return event.isAccepted();
+    }
+
+    bool sendWheel(
+        const QPoint &angleDelta,
+        const QPoint &pixelDelta = {},
+        Qt::ScrollPhase phase = Qt::NoScrollPhase,
+        bool inverted = false)
+    {
+        QWheelEvent event(
+            QPointF(500.0, 400.0),
+            QPointF(500.0, 400.0),
+            pixelDelta,
+            angleDelta,
+            Qt::NoButton,
+            Qt::NoModifier,
+            phase,
+            inverted);
+        event.ignore();
+        wheelEvent(&event);
+        return event.isAccepted();
     }
 
     void clickAt(const QPointF &position)
@@ -157,6 +182,125 @@ void TreeSceneItemTest::reducedMotionTravelSnapsWithOneSignal()
     QCOMPARE(cameraSpy.count(), 1);
 }
 
+void TreeSceneItemTest::perspectiveWheelEventsDriveBoundedTravel()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    const QDir root(temporaryDirectory.path());
+    for (int index = 0; index < 12; ++index) {
+        makeDirectory(
+            root,
+            QStringLiteral("Branch %1")
+                .arg(index, 2, 10, QLatin1Char('0')));
+    }
+
+    EventTreeSceneItem scene(temporaryDirectory.path());
+    scene.setSize({1000.0, 800.0});
+    QTRY_COMPARE_WITH_TIMEOUT(
+        scene.selectedMaterializedChildCount(), qulonglong(12), 5000);
+    QVERIFY(scene.maximumTravelDepth() >= 1.0);
+
+    QVERIFY(scene.sendWheel({0, 120}));
+    QCOMPARE(scene.m_travelTargetDepth, qreal(0.5));
+    QVERIFY(scene.sendWheel({0, 120}));
+    QCOMPARE(scene.m_travelTargetDepth, qreal(1.0));
+    scene.setReducedMotion(true);
+    QCOMPARE(scene.travelDepth(), qreal(1.0));
+
+    scene.resetView();
+    QCOMPARE(scene.travelDepth(), qreal(0.0));
+    scene.setReducedMotion(false);
+    const PerspectiveProfile &perspective =
+        ThemeRegistry::active().perspective;
+    const qreal touchpadPixelsPerStep =
+        perspective.touchpadPixelsPerStep;
+    QVERIFY(touchpadPixelsPerStep > 2.0);
+    const int partialPixelDelta = qMax(
+        1, qFloor(touchpadPixelsPerStep / 2.0));
+    QVERIFY(partialPixelDelta < touchpadPixelsPerStep);
+    const qreal firstTouchpadTarget =
+        partialPixelDelta / touchpadPixelsPerStep
+        * perspective.wheelTravelPerStep;
+    QVERIFY(scene.sendWheel(
+        {}, {0, partialPixelDelta}, Qt::ScrollUpdate));
+    QCOMPARE(scene.travelDepth(), qreal(0.0));
+    QCOMPARE(scene.m_travelStartDepth, qreal(0.0));
+    QCOMPARE(scene.m_travelTargetDepth, firstTouchpadTarget);
+
+    const qreal accumulatedTouchpadTarget =
+        firstTouchpadTarget
+        + partialPixelDelta / touchpadPixelsPerStep
+            * perspective.wheelTravelPerStep;
+    QVERIFY(scene.sendWheel(
+        {}, {0, partialPixelDelta}, Qt::ScrollUpdate));
+    QCOMPARE(scene.travelDepth(), qreal(0.0));
+    QCOMPARE(scene.m_travelStartDepth, qreal(0.0));
+    QCOMPARE(scene.m_travelTargetDepth, accumulatedTouchpadTarget);
+    scene.setReducedMotion(true);
+    QCOMPARE(scene.travelDepth(), accumulatedTouchpadTarget);
+
+    scene.resetView();
+    scene.setReducedMotion(false);
+    QVERIFY(scene.sendWheel({0, 240}));
+    const int duration = ThemeRegistry::active().motion.cameraDuration;
+    QVERIFY(duration > 1);
+    scene.m_travelAnimation.setCurrentTime(duration / 2);
+    const qreal reversalStart = scene.travelDepth();
+    QVERIFY(reversalStart > 0.0);
+    QVERIFY(scene.sendWheel({0, -120}));
+    const qreal expectedReversal = qMax(
+        qreal(0.0), reversalStart - qreal(0.5));
+    QCOMPARE(scene.m_travelStartDepth, reversalStart);
+    QCOMPARE(scene.m_travelTargetDepth, expectedReversal);
+    scene.setReducedMotion(true);
+    QCOMPARE(scene.travelDepth(), expectedReversal);
+
+    scene.resetView();
+    QSignalSpy cameraSpy(&scene, &TreeSceneItem::cameraChanged);
+    QVERIFY(scene.sendWheel({0, -120}));
+    QCOMPARE(scene.travelDepth(), qreal(0.0));
+    QCOMPARE(cameraSpy.count(), 0);
+
+    travelToEnd(scene);
+    cameraSpy.clear();
+    const qreal maximum = scene.maximumTravelDepth();
+    QVERIFY(scene.sendWheel({0, 120}));
+    QCOMPARE(scene.travelDepth(), maximum);
+    QCOMPARE(cameraSpy.count(), 0);
+}
+
+void TreeSceneItemTest::perspectiveBlankDoubleClickAndReset()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+    const QDir root(temporaryDirectory.path());
+    for (int index = 0; index < 12; ++index) {
+        makeDirectory(
+            root,
+            QStringLiteral("Branch %1")
+                .arg(index, 2, 10, QLatin1Char('0')));
+    }
+
+    EventTreeSceneItem scene(temporaryDirectory.path());
+    scene.setSize({1000.0, 800.0});
+    scene.setReducedMotion(true);
+    QTRY_COMPARE_WITH_TIMEOUT(
+        scene.selectedMaterializedChildCount(), qulonglong(12), 5000);
+    QVERIFY(scene.maximumTravelDepth() > 0.0);
+
+    const QPointF blankPoint(999.0, 1.0);
+    QCOMPARE(scene.nodeAt(blankPoint), InvalidNodeId);
+    QVERIFY(scene.doubleClickBlank(blankPoint));
+    QCOMPARE(scene.travelDepth(), scene.maximumTravelDepth());
+    QVERIFY(scene.canResetView());
+
+    QSignalSpy cameraSpy(&scene, &TreeSceneItem::cameraChanged);
+    scene.resetView();
+    QCOMPARE(scene.travelDepth(), qreal(0.0));
+    QVERIFY(!scene.canResetView());
+    QCOMPARE(cameraSpy.count(), 1);
+}
+
 void TreeSceneItemTest::focusAndUpResetTravelWithOneSignal()
 {
     QTemporaryDir temporaryDirectory;
@@ -186,6 +330,16 @@ void TreeSceneItemTest::focusAndUpResetTravelWithOneSignal()
     cameraSpy.clear();
 
     scene.goUp();
+    QCOMPARE(scene.travelDepth(), qreal(0.0));
+    QCOMPARE(cameraSpy.count(), 1);
+
+    QTRY_VERIFY(scene.maximumTravelDepth() > 0.0);
+    scene.travelForward();
+    QVERIFY(scene.travelDepth() > 0.0);
+    cameraSpy.clear();
+
+    scene.goBack();
+    QCOMPARE(scene.breadcrumb(), branch.path());
     QCOMPARE(scene.travelDepth(), qreal(0.0));
     QCOMPARE(cameraSpy.count(), 1);
 }

@@ -108,8 +108,8 @@ Stage 7 is complete:
 - The inspected 29-entry frame stayed bounded and reported `+21 more in
   Contents`, exactly 29 known entries minus eight projected direct children.
 
-Stage 8 is complete in code with deterministic offscreen renderer validation;
-an isolated end-to-end input sweep remains:
+Stage 8 is complete in code with deterministic offscreen renderer and direct
+Qt event validation; offscreen QML wiring and physical-input sweeps remain:
 
 - Travel range is recomputed from complete stable world layout on focus, live
   changes, and resize; current and pending depths clamp deterministically.
@@ -127,19 +127,26 @@ an isolated end-to-end input sweep remains:
   prove that forward travel changes painted output, reversal restores it
   bit-for-bit, focus resets to depth zero, and reduced motion reaches the same
   final frame as an immediate snap.
+- Direct synthetic Qt events now cover accepted angle-delta wheel input,
+  accumulation across partial pixel-delta `ScrollUpdate` events, reversal from
+  the rendered depth, bounded no-ops, open-space double-click, reset, and
+  focus/up/back travel resets without a display or personal filesystem.
 - Stage 9 validation also locks exact live-scan deltas and the planar
   reduced-motion camera notification. Unchanged scan survivors are no longer
   reported as new arrivals at reconciliation.
 
 Remaining Stage 9 validation:
 
-- Complete an isolated interactive sweep of wheel/touchpad, Page Up/Down,
-  visible controls, reset, open-space travel, and focus/backtracking. The
-  startup frame is inspected; compositor-level synthetic key delivery was
-  inconclusive and is not counted as passing evidence.
-- Projected-surface interpolation is covered by pure geometry invariants and an
-  offscreen focus-transition paint test. Keep checking interruption, live churn,
-  and backtracking in the isolated interactive sweep.
+- Add an offscreen QML integration test for Page Up/Down, visible travel/reset
+  controls, Ctrl+0, and active-focus gating; the C++ handlers beneath those
+  bindings already have direct synthetic event coverage.
+- Reserve the future VM sweep for compositor and physical-input evidence:
+  KWin/Wayland focus delivery, wheel direction/inversion/phase, touchpad event
+  coalescing, compositor double-click timing, scaling, and perceived motion.
+- Projected-surface interpolation is covered by pure geometry invariants and a
+  deterministic offscreen focus-transition paint/hit test. Mid-transition
+  refocus resumes from the exact visible surface; keep checking simultaneous
+  live churn and backtracking in later integration sweeps.
 - Renderer-owned departure snapshots now preserve the final typed branch
   geometry while terminal reconciliation prunes removed semantic subtrees
   before notifying observers. Recreated and retyped paths receive fresh IDs,
