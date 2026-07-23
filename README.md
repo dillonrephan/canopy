@@ -144,4 +144,6 @@ failures honestly, and never silently overwrite files.
 
 ## License
 
-No license has been selected yet. Until one is added, all rights are reserved.
+Canopy is free software licensed under the
+[GNU General Public License v3.0](LICENSE).
+Copyright © 2026 iceBurgThic.
