@@ -85,7 +85,9 @@ Create or update the container, build the project, and run its tests:
 The script is safe to run again. It reads Fedora packages from
 [`requirements-dev.txt`](requirements-dev.txt), reuses the `canopy-dev`
 container when it exists, and keeps build output in the project `../lab/build/`. Set
-`CANOPY_TOOLBOX_NAME` or `CANOPY_BUILD_DIR` to override those defaults.
+`CANOPY_TOOLBOX_NAME` or `CANOPY_BUILD_DIR` to override those defaults. Build
+paths are normalized before CMake; compilation defaults to four parallel jobs
+(`CANOPY_BUILD_JOBS` can override this).
 
 After the environment is provisioned, run the complete configure, build, QML
 lint, and unit-test loop without reinstalling packages:

@@ -5,7 +5,7 @@ set -Eeuo pipefail
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly PROJECT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 readonly TOOLBOX_NAME="${CANOPY_TOOLBOX_NAME:-canopy-dev}"
-readonly BUILD_DIR="${CANOPY_BUILD_DIR:-${PROJECT_DIR}/../lab/build}"
+readonly BUILD_DIR="$(realpath -m -- "${CANOPY_BUILD_DIR:-${PROJECT_DIR}/../lab/build}")"
 
 for command_name in toolbox podman; do
     if ! command -v "${command_name}" >/dev/null 2>&1; then
@@ -31,7 +31,7 @@ toolbox run --container "${TOOLBOX_NAME}" \
 
 printf 'Building Canopy\n'
 toolbox run --container "${TOOLBOX_NAME}" \
-    cmake --build "${BUILD_DIR}"
+    cmake --build "${BUILD_DIR}" --parallel "${CANOPY_BUILD_JOBS:-4}"
 
 printf 'Linting QML\n'
 toolbox run --container "${TOOLBOX_NAME}" \
