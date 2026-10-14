@@ -84,7 +84,7 @@ Create or update the container, build the project, and run its tests:
 
 The script is safe to run again. It reads Fedora packages from
 [`requirements-dev.txt`](requirements-dev.txt), reuses the `canopy-dev`
-container when it exists, and keeps build output in `build-toolbox/`. Set
+container when it exists, and keeps build output in the project `../lab/build/`. Set
 `CANOPY_TOOLBOX_NAME` or `CANOPY_BUILD_DIR` to override those defaults.
 
 After the environment is provisioned, run the complete configure, build, QML
@@ -98,20 +98,20 @@ To configure and build manually after provisioning:
 
 ```bash
 toolbox run --container canopy-dev \
-    cmake -S . -B build-toolbox -G Ninja -DCMAKE_BUILD_TYPE=Debug
-toolbox run --container canopy-dev cmake --build build-toolbox
+    cmake -S . -B ../lab/build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+toolbox run --container canopy-dev cmake --build ../lab/build
 ```
 
 Run from a graphical desktop session:
 
 ```bash
-toolbox run --container canopy-dev ./build-toolbox/canopy
+toolbox run --container canopy-dev ../lab/build/canopy
 ```
 
 Pass an optional directory to open it directly:
 
 ```bash
-toolbox run --container canopy-dev ./build-toolbox/canopy ~/.config
+toolbox run --container canopy-dev ../lab/build/canopy ~/.config
 ```
 
 Capture a frame on an isolated virtual KWin display without opening or focusing
@@ -131,7 +131,7 @@ Static-check the QML:
 
 ```bash
 toolbox run --container canopy-dev \
-    cmake --build build-toolbox --target canopy_qmllint
+    cmake --build ../lab/build --target canopy_qmllint
 ```
 
 ## Safety boundary

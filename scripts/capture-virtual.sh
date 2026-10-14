@@ -6,7 +6,7 @@ project_root="$(cd -- "${script_dir}/.." && pwd)"
 
 output_path="${1:-/tmp/canopy-screenshot.png}"
 open_path="${2:-}"
-build_dir="${CANOPY_BUILD_DIR:-${project_root}/build-toolbox}"
+build_dir="${CANOPY_BUILD_DIR:-${project_root}/../lab/build}"
 app_path="${build_dir}/canopy"
 capture_delay="${CANOPY_CAPTURE_DELAY:-2}"
 virtual_width="${CANOPY_CAPTURE_WIDTH:-1410}"

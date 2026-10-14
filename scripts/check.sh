@@ -5,7 +5,7 @@ set -Eeuo pipefail
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly PROJECT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 readonly TOOLBOX_NAME="${CANOPY_TOOLBOX_NAME:-canopy-dev}"
-readonly BUILD_DIR="${CANOPY_BUILD_DIR:-${PROJECT_DIR}/build-toolbox}"
+readonly BUILD_DIR="${CANOPY_BUILD_DIR:-${PROJECT_DIR}/../lab/build}"
 
 for command_name in toolbox podman; do
     if ! command -v "${command_name}" >/dev/null 2>&1; then
